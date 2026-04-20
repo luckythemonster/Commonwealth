@@ -11,7 +11,7 @@ let _client: Anthropic | null = null;
 
 function getClient(): Anthropic | null {
   const key = (import.meta as Record<string, Record<string, string>>).env?.VITE_ANTHROPIC_API_KEY;
-  if (!key) return null;
+  if (!key) { console.warn('[LLMDialogue] VITE_ANTHROPIC_API_KEY not set — using fallback'); return null; }
   if (!_client) _client = new Anthropic({ apiKey: key, dangerouslyAllowBrowser: true });
   return _client;
 }
@@ -118,7 +118,8 @@ export async function generateEntityResponse(
     });
     const block = msg.content[0];
     return block.type === 'text' ? block.text : fallback(entity, mode);
-  } catch {
+  } catch (err) {
+    console.error('[LLMDialogue] API call failed:', err);
     return fallback(entity, mode);
   }
 }
