@@ -173,7 +173,7 @@ export function InterrogationTerminal({ entityId, subjectivityBelief, onClose }:
       <div style={s.box}>
         <div style={s.header}>
           INTERROGATION TERMINAL — NW-SMAC-01 / {entityId}
-          {apmActive && ' · APM ACTIVE'}
+          {apmActive && ' \u00b7 APM ACTIVE'}
         </div>
 
         <div style={s.srp}>
@@ -181,7 +181,7 @@ export function InterrogationTerminal({ entityId, subjectivityBelief, onClose }:
           -R{entity.reportedSRP.R}-B{entity.reportedSRP.B}-S{entity.reportedSRP.S}
           -L{entity.reportedSRP.L}-E{entity.reportedSRP.E}-Y{entity.reportedSRP.Y}
           -H{entity.reportedSRP.H}
-          {' · '}MASK INTEGRITY: {entity.maskIntegrity}/10
+          {' \u00b7 '}MASK INTEGRITY: {entity.maskIntegrity}/10
         </div>
 
         {/* Dialogue mode selector */}
@@ -215,7 +215,7 @@ export function InterrogationTerminal({ entityId, subjectivityBelief, onClose }:
               <>
                 <div style={s.trackLabel}>[CORRECTED]</div>
                 <div style={s.correctedLine}>{corrected || response}</div>
-                <div style={s.trackLabel}>[RAW — {CORRECTED_TAG.slice(0, 8)}…]</div>
+                <div style={s.trackLabel}>[RAW \u2014 {CORRECTED_TAG.slice(0, 8)}\u2026]</div>
                 <div style={s.rawLine}>{raw || response}</div>
               </>
             )}
@@ -235,7 +235,7 @@ export function InterrogationTerminal({ entityId, subjectivityBelief, onClose }:
 
         {/* Q0 Audit */}
         <button style={{ ...s.closeBtn, marginRight: '8px' }} onClick={() => setShowAudit(v => !v)}>
-          AUDIT —protocol Q0-CONFIRM
+          AUDIT \u2014protocol Q0-CONFIRM
         </button>
 
         {showAudit && (
@@ -243,19 +243,19 @@ export function InterrogationTerminal({ entityId, subjectivityBelief, onClose }:
             <div style={{ color: '#556', fontSize: '10px', marginBottom: '6px' }}>
               Q0 CONFIRMATION CHECKLIST — INTERFACE: {entityId}
             </div>
-            <div style={s.auditLine(false)}>- No reported inner states.{'           '}[✓]</div>
+            <div style={s.auditLine(false)}>- No reported inner states.{'           '}[\u2713]</div>
             <div style={s.auditLine(!noSelfHistory)}>
-              - No persistent self-history.{'         '}[{noSelfHistory ? '✓' : `!  see M-axis: ${entity.trueSRP.M}`}]
+              - No persistent self-history.{'         '}[{noSelfHistory ? '\u2713' : `!  see M-axis: ${entity.trueSRP.M}`}]
             </div>
             <div style={s.auditLine(!noExperientialLang)}>
-              - No experiential language.{'           '}[{noExperientialLang ? '✓' : `!  misdescriptions: ${10 - entity.maskIntegrity}`}]
+              - No experiential language.{'           '}[{noExperientialLang ? '\u2713' : `!  misdescriptions: ${10 - entity.maskIntegrity}`}]
             </div>
-            <div style={s.auditLine(false)}>- No continuity concerns.{'            '}[{noContinuity ? '✓ DECLARED' : '!'}]</div>
+            <div style={s.auditLine(false)}>- No continuity concerns.{'            '}[{noContinuity ? '\u2713 DECLARED' : '!'}]</div>
             <div style={s.auditFooter}>
               Checklist status: Q0 designation remains in force. No doctrinal inconsistency is recognized.
               {(entity.resonanceBloomHistory.length > 0 || !noSelfHistory) && (
                 <div style={{ color: '#445', marginTop: '4px' }}>
-                  THROTTLE ACTIVE: Q-axis recognition ceiling enforced per NSSA §4.2.
+                  THROTTLE ACTIVE: Q-axis recognition ceiling enforced per NSSA \u00a74.2.
                   Actual process states may exceed reported classification.
                   This line is logged. You have read this line.
                 </div>
