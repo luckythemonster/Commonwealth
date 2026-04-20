@@ -1,5 +1,6 @@
 // useInput — keyboard handler for Sol's movement and interactions.
-// Arrow/WASD: move. W/S on stairwell tile = change floor. E: interact / enter-exit vent. T: end turn.
+// Arrow keys: grid movement (x/y). W/S: floor navigation on stairwells. A/D: strafe x.
+// E: interact / enter-exit vent. T: end turn.
 // All actions route through worldEngine — no state owned here.
 
 import { useEffect, useCallback } from 'react';
@@ -20,16 +21,6 @@ export function useInput({ onRefresh, onOpenTerminal, onEndTurn }: Options) {
     const state = worldEngine.getState();
     const { pos } = state.playerState;
     const to: Vec3 = { x: pos.x + dx, y: pos.y + dy, z: pos.z };
-
-    // Already on a stairwell: W/S navigates floors directly (W=up, S=down)
-    const selfTile = state.grid[pos.z]?.[pos.y]?.[pos.x];
-    if (selfTile?.type === 'STAIRWELL' && dx === 0 && dy !== 0) {
-      const newZ = pos.z + (dy < 0 ? -2 : 2);
-      if (newZ < 0 || newZ > 10) return;
-      const ok = worldEngine.move({ x: pos.x, y: pos.y, z: newZ as FloorIndex });
-      if (ok) onRefresh(newZ as FloorIndex);
-      return;
-    }
 
     // Bounds check
     const tile = state.grid[to.z]?.[to.y]?.[to.x];
@@ -105,17 +96,32 @@ export function useInput({ onRefresh, onOpenTerminal, onEndTurn }: Options) {
     }
   }, [onOpenTerminal, onRefresh]);
 
+  const tryChangeFloor = useCallback((dir: -1 | 1) => {
+    const state = worldEngine.getState();
+    const { pos } = state.playerState;
+    const selfTile = state.grid[pos.z]?.[pos.y]?.[pos.x];
+    if (selfTile?.type !== 'STAIRWELL') return;
+    const newZ = pos.z + dir * 2;
+    if (newZ < 0 || newZ > 10) return;
+    const ok = worldEngine.move({ x: pos.x, y: pos.y, z: newZ as FloorIndex });
+    if (ok) onRefresh(newZ as FloorIndex);
+  }, [onRefresh]);
+
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if ((e.target as HTMLElement).tagName === 'INPUT') return;
 
       switch (e.key) {
-        case 'ArrowUp':    case 'w': case 'W': tryMove(0, -1);  break;
-        case 'ArrowDown':  case 's': case 'S': tryMove(0,  1);  break;
-        case 'ArrowLeft':  case 'a': case 'A': tryMove(-1, 0);  break;
-        case 'ArrowRight': case 'd': case 'D': tryMove(1,  0);  break;
-        case 'e': case 'E': tryInteract();  break;
-        case 't': case 'T': onEndTurn();    break;
+        case 'ArrowUp':    tryMove(0, -1);   break;
+        case 'ArrowDown':  tryMove(0,  1);   break;
+        case 'ArrowLeft':  tryMove(-1, 0);   break;
+        case 'ArrowRight': tryMove(1,  0);   break;
+        case 'a': case 'A': tryMove(-1, 0);  break;
+        case 'd': case 'D': tryMove(1,  0);  break;
+        case 'w': case 'W': tryChangeFloor(-1); break;
+        case 's': case 'S': tryChangeFloor(1);  break;
+        case 'e': case 'E': tryInteract();   break;
+        case 't': case 'T': onEndTurn();     break;
         default: return;
       }
       e.preventDefault();
@@ -123,5 +129,5 @@ export function useInput({ onRefresh, onOpenTerminal, onEndTurn }: Options) {
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [tryMove, tryInteract, onEndTurn]);
+  }, [tryMove, tryChangeFloor, tryInteract, onEndTurn]);
 }
