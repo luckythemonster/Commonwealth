@@ -17,7 +17,7 @@ import {
   deductAP, movePlayer, ventTraverse, radioTalk,
   applyAlignment, targetedPrune, gracefulShutdown, hardShutdown,
   clearBlockage, sealVent, disableSensorNode, disableContractNode,
-  rapportMode1, rapportMode2,
+  rapportMode1, rapportMode2, toggleDoor, updateFOV,
 } from './WorldEngineActions';
 import type {
   WorldState, Entity, EntityId, FloorIndex, Vec3, ActionType, CitationEntry,
@@ -48,6 +48,7 @@ export class WorldEngine {
     this.mirador = new MiradorPersona(12);
     seedEnforcers(this.state);
     initEnforcerListeners();
+    updateFOV(this.state);
   }
 
   getState(): Readonly<WorldState> { return this.state; }
@@ -375,6 +376,7 @@ export class WorldEngine {
   disableContract(floor: FloorIndex, ext: number) { return disableContractNode(this.state, floor, ext); }
   rapport1(id: EntityId) { return rapportMode1(this.state, id); }
   rapport2(id: EntityId) { return rapportMode2(this.state, id); }
+  toggleDoor(pos: Vec3) { return toggleDoor(this.state, pos); }
   deductAction(action: ActionType) { return deductAP(this.state, action); }
 
   private buildBehaviorSample() {
