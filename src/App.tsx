@@ -64,7 +64,8 @@ export default function App() {
     game.events.once('ready', () => {
       const scene = game.scene.getScene('GameScene') as GameScene;
       sceneRef.current = scene;
-      refreshFloor(4, scene);
+      // Wait for scene.create() to finish before pushing tile data
+      scene.events.once('scene-ready', () => refreshFloor(4, scene));
     });
     return () => game.destroy(true);
   // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -12,6 +12,7 @@ import {
   getAdministrativeFloors,
   getFloorCrowdCounts,
 } from './WorldEngineState';
+import { seedEnforcers, initEnforcerListeners, tickEnforcer } from './EnforcerAI';
 import {
   deductAP, movePlayer, ventTraverse, radioTalk,
   applyAlignment, targetedPrune, gracefulShutdown, hardShutdown,
@@ -45,6 +46,8 @@ export class WorldEngine {
     this.ventOptimizer = new VentOptimizer(this.state.grid);
     this.stitcher = new StitcherTimer(this.state.stitcherTurnsRemaining);
     this.mirador = new MiradorPersona(12);
+    seedEnforcers(this.state);
+    initEnforcerListeners();
   }
 
   getState(): Readonly<WorldState> { return this.state; }
@@ -93,6 +96,12 @@ export class WorldEngine {
   }
 
   private resolveEntity(entity: Entity): void {
+    // Enforcers use dedicated AI tick
+    if (entity.id.startsWith('ENFORCER')) {
+      tickEnforcer(entity, this.state);
+      return;
+    }
+
     // Increment temporal persistence each turn not reset
     entity.temporalPersistence++;
 

@@ -10,14 +10,14 @@ import type { WorldTile, FloorIndex } from '../types/world.types';
 const TILE_SIZE = 32;
 
 const TILE_COLORS: Record<string, number> = {
-  FLOOR:              0x1a1a1a,
-  WALL:               0x050505,
-  VENT_ENTRY:         0x0a2a0a,
-  VENT_PASSAGE:       0x061a06,
-  TERMINAL:           0x0a0a2a,
-  STAIRWELL:          0x2a2a0a,
-  FACILITY_CONTROL:   0x1a0a2a,
-  BROADCAST_TERMINAL: 0x1a0a2a,
+  FLOOR:              0x2a2e32,
+  WALL:               0x0a0c0e,
+  VENT_ENTRY:         0x1a3a1a,
+  VENT_PASSAGE:       0x0e220e,
+  TERMINAL:           0x1a1a3a,
+  STAIRWELL:          0x3a3a1a,
+  FACILITY_CONTROL:   0x2a1a3a,
+  BROADCAST_TERMINAL: 0x2a1a3a,
   VOID:               0x000000,
 };
 
@@ -47,10 +47,12 @@ export class GameScene extends Phaser.Scene {
   }
 
   create(): void {
-    this.tileGraphics   = this.add.graphics();
-    this.entityGraphics = this.add.graphics();
+    this.tileGraphics    = this.add.graphics();
+    this.entityGraphics  = this.add.graphics();
     this.overlayGraphics = this.add.graphics();
     this.subscribeToEventBus();
+    // Signal React that the scene is fully ready for data
+    this.events.emit('scene-ready');
   }
 
   private subscribeToEventBus(): void {
