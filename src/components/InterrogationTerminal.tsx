@@ -22,15 +22,17 @@ const CORRECTED_TAG = '[CORRECTION:';
 function splitCorrections(text: string): { corrected: string; raw: string } {
   const correctedParts: string[] = [];
   const rawParts: string[] = [];
-  const regex = /([^[]*)\[CORRECTION:\s*([^\]]+)\]/g;
+  // Format: {original_phrase}[CORRECTION: replacement]
+  const regex = /([^{]*)\{([^}]*)\}\[CORRECTION:\s*([^\]]+)\]/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
   while ((match = regex.exec(text)) !== null) {
-    const before = match[1];
-    const correction = match[2];
-    correctedParts.push(before + correction);
-    rawParts.push(before + '[' + text.slice(match.index + before.length, match.index + match[0].length).replace(/\[CORRECTION:\s*/, '').replace(/\]/, '') + ']');
+    const preText   = match[1];
+    const original  = match[2];
+    const replacement = match[3];
+    correctedParts.push(preText + replacement);
+    rawParts.push(preText + original);
     lastIndex = regex.lastIndex;
   }
   correctedParts.push(text.slice(lastIndex));
