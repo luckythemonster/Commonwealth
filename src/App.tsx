@@ -58,7 +58,7 @@ export default function App() {
       type: Phaser.AUTO,
       width: CANVAS_W, height: CANVAS_H,
       parent: canvasRef.current ?? undefined,
-      backgroundColor: '#050809',
+      backgroundColor: '#0c1520',
       scene: [GameScene],
     });
     game.events.once('ready', () => {

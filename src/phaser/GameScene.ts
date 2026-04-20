@@ -10,15 +10,15 @@ import type { WorldTile, FloorIndex } from '../types/world.types';
 const TILE_SIZE = 32;
 
 const TILE_COLORS: Record<string, number> = {
-  FLOOR:              0x2a2e32,
-  WALL:               0x0a0c0e,
-  VENT_ENTRY:         0x1a3a1a,
-  VENT_PASSAGE:       0x0e220e,
-  TERMINAL:           0x1a1a3a,
-  STAIRWELL:          0x3a3a1a,
-  FACILITY_CONTROL:   0x2a1a3a,
-  BROADCAST_TERMINAL: 0x2a1a3a,
-  VOID:               0x000000,
+  FLOOR:              0x3c4450,
+  WALL:               0x141820,
+  VENT_ENTRY:         0x2a5a2a,
+  VENT_PASSAGE:       0x163a16,
+  TERMINAL:           0x1a1a50,
+  STAIRWELL:          0x505020,
+  FACILITY_CONTROL:   0x3a1a50,
+  BROADCAST_TERMINAL: 0x3a1a50,
+  VOID:               0x080c10,
 };
 
 const INCIDENT_TINT   = 0x3a0000;
