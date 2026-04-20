@@ -11,17 +11,31 @@ const TILE_SIZE   = 32;   // display px per tile
 const SPRITE_SIZE = 16;   // source sprite px
 
 // Ditharts free sci-fi tileset — 256x480, 16x30 grid of 16x16 tiles.
-// Frame index = row * 16 + col. null = skip draw (canvas bg shows through).
-const TILE_FRAMES: Record<string, number | null> = {
-  FLOOR:              0,    // row 0 col 0  — medium grey concrete
-  WALL:               36,   // row 2 col 4  — near-black #232323
-  VENT_PASSAGE:       192,  // row 12 col 0 — lighter floor variant
-  VENT_ENTRY:         188,  // row 11 col 12 — bright near-white, grate marker
-  TERMINAL:           136,  // row 8 col 8  — teal glass panel
-  BROADCAST_TERMINAL: 152,  // row 9 col 8  — darker teal panel
-  STAIRWELL:          160,  // row 10 col 0 — dark grey #3c3c3c
-  FACILITY_CONTROL:   176,  // row 11 col 0 — very dark panel #313131
-  VOID:               null, // skip — dark canvas background
+// Frame index = row * 16 + col. FLOOR and VENT_PASSAGE use the sprite for texture.
+// All other types are rendered as solid/tinted color blocks (tileset is all grey).
+const TILE_SPRITE_FRAMES: Record<string, number | null> = {
+  FLOOR:              0,    // row 0 col 0 — concrete texture base
+  VENT_PASSAGE:       192,  // row 12 col 0 — floor variant texture for vent corridors
+  VENT_ENTRY:         188,  // row 11 col 12 — drawn under green overlay
+  TERMINAL:           136,  // row 8 col 8  — drawn under blue overlay
+  BROADCAST_TERMINAL: 152,  // row 9 col 8  — drawn under purple overlay
+  STAIRWELL:          160,  // row 10 col 0 — drawn under olive overlay
+  FACILITY_CONTROL:   176,  // row 11 col 0 — drawn under dark-purple overlay
+  WALL:               null, // solid dark fill only — no sprite
+  VOID:               null, // dark canvas background only
+};
+
+// Color fills drawn over (or instead of) sprites for tile-type legibility.
+const TILE_OVERLAYS: Record<string, { color: number; alpha: number } | null> = {
+  FLOOR:              null,
+  VENT_PASSAGE:       null,
+  VOID:               null,
+  WALL:               { color: 0x0d1422, alpha: 1.0  },
+  VENT_ENTRY:         { color: 0x1a6020, alpha: 0.75 },
+  TERMINAL:           { color: 0x1a3870, alpha: 0.75 },
+  BROADCAST_TERMINAL: { color: 0x52166a, alpha: 0.75 },
+  STAIRWELL:          { color: 0x5c5010, alpha: 0.75 },
+  FACILITY_CONTROL:   { color: 0x2a0a4a, alpha: 0.85 },
 };
 
 const APM_OVERLAY   = 0x001a2a;
@@ -31,6 +45,7 @@ const AWAKENED_TINT = 0x001a10;
 export class GameScene extends Phaser.Scene {
   private tileRT!:         Phaser.GameObjects.RenderTexture;
   private tileDecorGfx!:   Phaser.GameObjects.Graphics;
+  private entityBgGfx!:    Phaser.GameObjects.Graphics;
   private entityRT!:        Phaser.GameObjects.RenderTexture;
   private overlayGraphics!: Phaser.GameObjects.Graphics;
   private currentFloor: FloorIndex = 4;
@@ -54,6 +69,7 @@ export class GameScene extends Phaser.Scene {
     // All RTs are half-res (sprites = 16px), setScale(2) → fills 640×448 canvas
     this.tileRT       = this.add.renderTexture(0, 0, 320, 224).setScale(2);
     this.tileDecorGfx = this.add.graphics();
+    this.entityBgGfx  = this.add.graphics();
     this.entityRT     = this.add.renderTexture(0, 0, 320, 224).setScale(2);
     this.overlayGraphics = this.add.graphics();
 
@@ -118,21 +134,36 @@ export class GameScene extends Phaser.Scene {
       const row = this.currentTiles[y];
       for (let x = 0; x < row.length; x++) {
         const tile  = row[x];
-        const frame = TILE_FRAMES[tile.type] ?? TILE_FRAMES.FLOOR;
+
+        // Draw sprite texture for FLOOR/VENT tiles; other types only show under their overlay
+        const frame = TILE_SPRITE_FRAMES[tile.type] ?? null;
         if (frame !== null) {
           this.tileRT.drawFrame('tileset', frame, x * SPRITE_SIZE, y * SPRITE_SIZE);
         }
 
-        // Incident tile: red tint overlay (game-coord scale)
+        // Color overlay — gives each tile type a distinct, legible color
+        const overlay = TILE_OVERLAYS[tile.type];
+        if (overlay) {
+          g.fillStyle(overlay.color, overlay.alpha);
+          g.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+        }
+
+        // Incident tile: red tint
         if (tile.incidentRecord) {
           g.fillStyle(0x3a0000, 0.55);
           g.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
         }
 
-        // Terminal hint border
+        // Terminal border hint
         if (tile.type === 'TERMINAL' || tile.type === 'BROADCAST_TERMINAL') {
-          g.lineStyle(1, 0x4a8888, 0.5);
-          g.strokeRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE - 1, TILE_SIZE - 1);
+          g.lineStyle(1, 0x8888cc, 0.6);
+          g.strokeRect(x * TILE_SIZE + 1, y * TILE_SIZE + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+        }
+
+        // Stairwell direction arrows (text)
+        if (tile.type === 'STAIRWELL') {
+          g.lineStyle(1, 0xccbb44, 0.8);
+          g.strokeRect(x * TILE_SIZE + 2, y * TILE_SIZE + 2, TILE_SIZE - 4, TILE_SIZE - 4);
         }
 
         // Low-oxygen strip at tile bottom
@@ -153,13 +184,19 @@ export class GameScene extends Phaser.Scene {
   private renderEntities(): void {
     // Entities are drawn by renderEntityData() — called externally by React
     this.entityRT.clear();
+    this.entityBgGfx.clear();
   }
 
   renderEntityData(
     entities: Array<{ x: number; y: number; id: string; isGhost: boolean; isEnforcer: boolean; isPlayer: boolean }>,
   ): void {
     this.entityRT.clear();
+    this.entityBgGfx.clear();
     for (const e of entities) {
+      const bgColor = e.isPlayer ? 0x00cc99 : e.isEnforcer ? 0xcc2222 : 0x887744;
+      const bgAlpha = e.isGhost ? 0.2 : 0.85;
+      this.entityBgGfx.fillStyle(bgColor, bgAlpha);
+      this.entityBgGfx.fillRect(e.x * TILE_SIZE + 4, e.y * TILE_SIZE + 4, TILE_SIZE - 8, TILE_SIZE - 8);
       const key   = e.isPlayer ? 'inspector' : e.isEnforcer ? 'guard' : 'inmate';
       const alpha = e.isGhost ? 0.35 : 1;
       this.entityRT.drawFrame(key, 0, e.x * SPRITE_SIZE, e.y * SPRITE_SIZE, alpha);
