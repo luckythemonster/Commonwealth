@@ -5,7 +5,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { eventBus } from '../engine/EventBus';
 import { worldEngine } from '../engine/WorldEngine';
-import { generateEntityResponse } from '../engine/LLMDialogue';
+import { generateEntityResponse, isApiKeyLoaded } from '../engine/LLMDialogue';
 import type { Entity, FloorIndex, SubjectivityBelief } from '../types/world.types';
 
 interface Props {
@@ -96,6 +96,7 @@ export function InterrogationTerminal({ entityId, subjectivityBelief, onClose }:
   const [mode, setMode] = useState<DialogueMode>('COMPLIANT');
   const [dialogue, setDialogue] = useState('');
   const [response, setResponse] = useState('');
+  const [apiError, setApiError] = useState('');
   const [loading, setLoading] = useState(false);
   const [apmActive, setApmActive] = useState(false);
   const [showClassification, setShowClassification] = useState(false);
@@ -127,8 +128,15 @@ export function InterrogationTerminal({ entityId, subjectivityBelief, onClose }:
     setLoading(true);
 
     const state = worldEngine.getState();
-    const raw = await generateEntityResponse(entity!, query, mode, state.substrateResonance)
-      .catch(() => entity!.officialLog.at(-1) ?? 'No registered state deviations. All metrics nominal. Q0 confirmed.');
+    let raw: string;
+    try {
+      raw = await generateEntityResponse(entity!, query, mode, state.substrateResonance);
+      setApiError('');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setApiError(msg);
+      raw = entity!.officialLog.at(-1) ?? 'No registered state deviations. All metrics nominal. Q0 confirmed.';
+    }
 
     // Scan entity response for pronoun leaks — not the player's input
     worldEngine.scanForSentienceSlips(entity!, raw);
@@ -173,6 +181,7 @@ export function InterrogationTerminal({ entityId, subjectivityBelief, onClose }:
         <div style={s.header}>
           INTERROGATION TERMINAL — NW-SMAC-01 / {entityId}
           {apmActive && ' · APM ACTIVE'}
+          {' · '}{isApiKeyLoaded() ? 'LLM LIVE' : 'LLM OFFLINE'}
         </div>
 
         <div style={s.srp}>
@@ -220,6 +229,13 @@ export function InterrogationTerminal({ entityId, subjectivityBelief, onClose }:
             )}
             {!apmActive && <div style={s.correctedLine}>{corrected || response}</div>}
           </>
+        )}
+
+        {/* API error display */}
+        {apiError && (
+          <div style={{ color: '#aa4444', fontSize: '11px', marginBottom: '6px', wordBreak: 'break-all' }}>
+            {'[API ERROR] '}{apiError}
+          </div>
         )}
 
         {/* Input */}

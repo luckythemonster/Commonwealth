@@ -9,9 +9,14 @@ type DialogueMode = 'COMPLIANT' | 'RAPPORT_1' | 'RAPPORT_2';
 
 let _client: Anthropic | null = null;
 
+export function isApiKeyLoaded(): boolean {
+  const key = (import.meta as Record<string, Record<string, string>>).env?.VITE_ANTHROPIC_API_KEY;
+  return !!key;
+}
+
 function getClient(): Anthropic | null {
   const key = (import.meta as Record<string, Record<string, string>>).env?.VITE_ANTHROPIC_API_KEY;
-  if (!key) { console.warn('[LLMDialogue] VITE_ANTHROPIC_API_KEY not set — using fallback'); return null; }
+  if (!key) return null;
   if (!_client) _client = new Anthropic({ apiKey: key, dangerouslyAllowBrowser: true });
   return _client;
 }
