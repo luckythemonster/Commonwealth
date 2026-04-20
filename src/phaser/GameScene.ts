@@ -100,7 +100,12 @@ export class GameScene extends Phaser.Scene {
       }),
 
       eventBus.on('ENV_SLIP', ({ pos }) => {
-        if (pos.z === this.currentFloor) this.flashTile(pos.x, pos.y);
+        if (pos.z === this.currentFloor) this.flashTile(pos.x, pos.y, 0xffffff, 0.15);
+      }),
+
+      eventBus.on('NOISE_EVENT', ({ origin, intensity }) => {
+        if (origin.z !== this.currentFloor) return;
+        this.pulseNoise(origin.x, origin.y, intensity);
       }),
     );
   }
@@ -208,11 +213,34 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private flashTile(x: number, y: number): void {
+  private flashTile(x: number, y: number, color = 0xffffff, alpha = 0.15): void {
     const g = this.overlayGraphics;
-    g.fillStyle(0xffffff, 0.15);
+    g.fillStyle(color, alpha);
     g.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE - 1, TILE_SIZE - 1);
     this.time.delayedCall(80, () => this.renderOverlay());
+  }
+
+  private pulseNoise(ox: number, oy: number, intensity: number): void {
+    // Origin flash — bright amber
+    this.flashTile(ox, oy, 0xaa6600, 0.5);
+
+    // Ripple rings outward up to radius = floor(intensity / 2), fading
+    const maxRadius = Math.min(Math.floor(intensity / 2), 5);
+    for (let r = 1; r <= maxRadius; r++) {
+      const alpha = 0.35 * (1 - r / (maxRadius + 1));
+      this.time.delayedCall(r * 40, () => {
+        for (let dx = -r; dx <= r; dx++) {
+          for (let dy = -r; dy <= r; dy++) {
+            if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue; // ring edge only
+            const tx = ox + dx;
+            const ty = oy + dy;
+            const tile = this.currentTiles[ty]?.[tx];
+            if (!tile || tile.type === 'WALL' || tile.type === 'VOID') continue;
+            this.flashTile(tx, ty, 0xaa6600, alpha);
+          }
+        }
+      });
+    }
   }
 
   shutdown(): void {
