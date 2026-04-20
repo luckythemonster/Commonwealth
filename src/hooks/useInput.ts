@@ -42,16 +42,6 @@ export function useInput({ onRefresh, onOpenTerminal, onEndTurn }: Options) {
       return;
     }
 
-    // Walking INTO a stairwell from an adjacent tile
-    if (tile.type === 'STAIRWELL' && dy !== 0) {
-      const dir = dy < 0 ? -2 : 2;
-      const newZ = Math.max(0, Math.min(10, pos.z + dir)) as FloorIndex;
-      const stairTo: Vec3 = { x: to.x, y: to.y, z: newZ };
-      const ok = worldEngine.move(stairTo);
-      if (ok) onRefresh(newZ);
-      return;
-    }
-
     const ok = worldEngine.move(to);
     if (ok) onRefresh(to.z as FloorIndex);
   }, [onRefresh]);
