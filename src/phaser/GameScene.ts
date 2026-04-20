@@ -67,10 +67,10 @@ export class GameScene extends Phaser.Scene {
 
   create(): void {
     // All RTs are half-res (sprites = 16px), setScale(2) → fills 640×448 canvas
-    this.tileRT       = this.add.renderTexture(0, 0, 320, 224).setScale(2);
+    this.tileRT       = this.add.renderTexture(0, 0, 320, 224).setScale(2).setOrigin(0, 0);
     this.tileDecorGfx = this.add.graphics();
     this.entityBgGfx  = this.add.graphics();
-    this.entityRT     = this.add.renderTexture(0, 0, 320, 224).setScale(2);
+    this.entityRT     = this.add.renderTexture(0, 0, 320, 224).setScale(2).setOrigin(0, 0);
     this.overlayGraphics = this.add.graphics();
 
     this.subscribeToEventBus();
