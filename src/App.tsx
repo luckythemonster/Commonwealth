@@ -54,7 +54,7 @@ export default function App() {
   useEffect(() => {
     worldEngine.initWorld();
     const game = new Phaser.Game({
-      type: Phaser.HEADLESS,
+      type: Phaser.AUTO,
       width: CANVAS_W, height: CANVAS_H,
       parent: canvasRef.current ?? undefined,
       backgroundColor: '#050809',
@@ -114,7 +114,7 @@ export default function App() {
       </div>
 
       <div style={{ display: 'flex', paddingTop: '32px' }}>
-        <div ref={canvasRef} style={{ width: CANVAS_W, height: CANVAS_H, flexShrink: 0 }} />
+        <div ref={canvasRef} style={{ width: CANVAS_W, height: CANVAS_H, flexShrink: 0, overflow: 'hidden' }} />
 
         {/* Sidebar */}
         <div style={{ width: '220px', padding: '12px', fontFamily: 'monospace', fontSize: '11px', color: '#556', borderLeft: '1px solid #223' }}>
