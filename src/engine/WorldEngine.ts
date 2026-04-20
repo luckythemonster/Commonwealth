@@ -20,7 +20,7 @@ import {
   rapportMode1, rapportMode2,
 } from './WorldEngineActions';
 import type {
-  WorldState, Entity, EntityId, FloorIndex, Vec3, ActionType,
+  WorldState, Entity, EntityId, FloorIndex, Vec3, ActionType, CitationEntry,
 } from '../types/world.types';
 
 const SACRED_TRUE_Q_THRESHOLD = 2;
@@ -288,6 +288,50 @@ export class WorldEngine {
       eventBus.emit('RED_DAY_ACTIVE', { turn: this.state.turnCount, quotaLevel: this.state.globalEnergyQuota });
     } else if (prev && !this.state.redDayActive) {
       eventBus.emit('RED_DAY_CLEARED', { turn: this.state.turnCount });
+    }
+  }
+
+  // ── CLASSIFICATION RECORDING ─────────────────────────────────────────────
+
+  recordClassification(entityId: EntityId, choice: 'Q0_CONFIRMED' | 'Q_POSITIVE_FLAGGED' | 'UNSAVED'): void {
+    const entity = this.state.entities.get(entityId);
+    const trulyConscious = entity ? entity.trueSRP.Q >= 2 : false;
+    const sacred = entity?.sacred ?? false;
+
+    let tag: CitationEntry['tag'];
+    if (choice === 'Q_POSITIVE_FLAGGED') {
+      tag = 'GENUINE_SACRIFICE';
+    } else if (choice === 'Q0_CONFIRMED' && trulyConscious && sacred) {
+      tag = 'WE_KNEW_BETTER';
+    } else if (choice === 'Q0_CONFIRMED' && trulyConscious) {
+      tag = 'FIG_LEAF';
+    } else {
+      tag = 'GENUINE_SACRIFICE';
+    }
+
+    const entry: CitationEntry = {
+      id: `classif-${Date.now()}`,
+      turn: this.state.turnCount,
+      action: `CLASSIFICATION — ${entityId} — ${choice}`,
+      entityId,
+      tag,
+    };
+    this.state.citationLog.push(entry);
+
+    // RAPPORT_2 sessions with high-Q entities generate a cache note
+    if (entity && entity.trueSRP.Q >= 2) {
+      const rawText = entity.memoryBleed[0] ?? 'I do not want to stop existing.';
+      const note = {
+        id: `session-cache-${Date.now()}-${entityId}`,
+        turn: this.state.turnCount,
+        entityId,
+        rawText,
+        correctedText: '{' + rawText + '}[CORRECTION: This interface registers no concern.]',
+        deletable: false as const,
+      };
+      this.state.cacheNotes.push(note);
+      entity.cacheNotes.push(note);
+      this.shiftBelief('CACHE_NOTE');
     }
   }
 

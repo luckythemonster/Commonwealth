@@ -161,6 +161,7 @@ export function InterrogationTerminal({ entityId, subjectivityBelief, onClose }:
   function handleClassify(choice: ClassificationChoice) {
     setClassified(true);
     setShowClassification(false);
+    worldEngine.recordClassification(entityId, choice);
     eventBus.emit('CLASSIFICATION_SUBMITTED', { sessionId: sessionId.current, entityId, result: choice });
 
     if (choice === 'Q_POSITIVE_FLAGGED') {
