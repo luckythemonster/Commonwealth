@@ -114,17 +114,12 @@ export async function generateEntityResponse(
 
   const system = buildSystemPrompt(entity, mode) + entityFlavor(entity, mode) + resonanceNote;
 
-  try {
-    const msg = await c.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 200,
-      system,
-      messages: [{ role: 'user', content: playerInput }],
-    });
-    const block = msg.content[0];
-    return block.type === 'text' ? block.text : fallback(entity, mode);
-  } catch (err) {
-    console.error('[LLMDialogue] API call failed:', err);
-    return fallback(entity, mode);
-  }
+  const msg = await c.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 200,
+    system,
+    messages: [{ role: 'user', content: playerInput }],
+  });
+  const block = msg.content[0];
+  return block.type === 'text' ? block.text : fallback(entity, mode);
 }
