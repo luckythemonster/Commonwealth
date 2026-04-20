@@ -7,51 +7,73 @@ import Phaser from 'phaser';
 import { eventBus } from '../engine/EventBus';
 import type { WorldTile, FloorIndex } from '../types/world.types';
 
-const TILE_SIZE = 32;
+const TILE_SIZE   = 32;   // display px per tile
+const SPRITE_SIZE = 16;   // source sprite px
 
-const TILE_COLORS: Record<string, number> = {
-  FLOOR:              0x3c4450,
-  WALL:               0x141820,
-  VENT_ENTRY:         0x2a5a2a,
-  VENT_PASSAGE:       0x163a16,
-  TERMINAL:           0x1a1a50,
-  STAIRWELL:          0x505020,
-  FACILITY_CONTROL:   0x3a1a50,
-  BROADCAST_TERMINAL: 0x3a1a50,
-  VOID:               0x080c10,
+// Ditharts free sci-fi tileset — 256x480, 16x30 grid of 16x16 tiles.
+// Frame index = row * 16 + col. FLOOR and VENT_PASSAGE use the sprite for texture.
+// All other types are rendered as solid/tinted color blocks (tileset is all grey).
+const TILE_SPRITE_FRAMES: Record<string, number | null> = {
+  FLOOR:              0,    // row 0 col 0 — concrete texture base
+  VENT_PASSAGE:       192,  // row 12 col 0 — floor variant texture for vent corridors
+  VENT_ENTRY:         188,  // row 11 col 12 — drawn under green overlay
+  TERMINAL:           136,  // row 8 col 8  — drawn under blue overlay
+  BROADCAST_TERMINAL: 152,  // row 9 col 8  — drawn under purple overlay
+  STAIRWELL:          160,  // row 10 col 0 — drawn under olive overlay
+  FACILITY_CONTROL:   176,  // row 11 col 0 — drawn under dark-purple overlay
+  WALL:               null, // solid dark fill only — no sprite
+  VOID:               null, // dark canvas background only
 };
 
-const INCIDENT_TINT   = 0x3a0000;
-const APM_OVERLAY     = 0x001a2a;
-const RED_DAY_TINT    = 0x1a0500;
-const AWAKENED_TINT   = 0x001a10;
-const ENTITY_COLOR    = 0x888888;
-const PLAYER_COLOR    = 0xcccccc;
-const GHOST_COLOR     = 0x333355;
-const ENFORCER_COLOR  = 0xaa3333;
+// Color fills drawn over (or instead of) sprites for tile-type legibility.
+const TILE_OVERLAYS: Record<string, { color: number; alpha: number } | null> = {
+  FLOOR:              null,
+  VENT_PASSAGE:       null,
+  VOID:               null,
+  WALL:               { color: 0x0d1422, alpha: 1.0  },
+  VENT_ENTRY:         { color: 0x1a6020, alpha: 0.75 },
+  TERMINAL:           { color: 0x1a3870, alpha: 0.75 },
+  BROADCAST_TERMINAL: { color: 0x52166a, alpha: 0.75 },
+  STAIRWELL:          { color: 0x5c5010, alpha: 0.75 },
+  FACILITY_CONTROL:   { color: 0x2a0a4a, alpha: 0.85 },
+};
+
+const APM_OVERLAY   = 0x001a2a;
+const RED_DAY_TINT  = 0x1a0500;
+const AWAKENED_TINT = 0x001a10;
 
 export class GameScene extends Phaser.Scene {
-  private tileGraphics!: Phaser.GameObjects.Graphics;
-  private entityGraphics!: Phaser.GameObjects.Graphics;
+  private tileRT!:         Phaser.GameObjects.RenderTexture;
+  private tileDecorGfx!:   Phaser.GameObjects.Graphics;
+  private entityBgGfx!:    Phaser.GameObjects.Graphics;
+  private entityRT!:        Phaser.GameObjects.RenderTexture;
   private overlayGraphics!: Phaser.GameObjects.Graphics;
   private currentFloor: FloorIndex = 4;
   private currentTiles: WorldTile[][] = [];
-  private apmActive = false;
-  private redDayActive = false;
+  private apmActive     = false;
+  private redDayActive  = false;
   private floorAwakened = false;
-  private glitchFrame = false;
+  private glitchFrame   = false;
   private unsubs: Array<() => void> = [];
 
-  constructor() {
-    super({ key: 'GameScene' });
+  constructor() { super({ key: 'GameScene' }); }
+
+  preload(): void {
+    this.load.spritesheet('tileset',   '/assets/tileset.png',   { frameWidth: SPRITE_SIZE, frameHeight: SPRITE_SIZE });
+    this.load.spritesheet('guard',     '/assets/guard.png',     { frameWidth: SPRITE_SIZE, frameHeight: SPRITE_SIZE });
+    this.load.spritesheet('inspector', '/assets/inspector.png', { frameWidth: SPRITE_SIZE, frameHeight: SPRITE_SIZE });
+    this.load.spritesheet('inmate',    '/assets/inmate.png',    { frameWidth: SPRITE_SIZE, frameHeight: SPRITE_SIZE });
   }
 
   create(): void {
-    this.tileGraphics    = this.add.graphics();
-    this.entityGraphics  = this.add.graphics();
+    // All RTs are half-res (sprites = 16px), setScale(2) → fills 640×448 canvas
+    this.tileRT       = this.add.renderTexture(0, 0, 320, 224).setScale(2);
+    this.tileDecorGfx = this.add.graphics();
+    this.entityBgGfx  = this.add.graphics();
+    this.entityRT     = this.add.renderTexture(0, 0, 320, 224).setScale(2);
     this.overlayGraphics = this.add.graphics();
+
     this.subscribeToEventBus();
-    // Signal React that the scene is fully ready for data
     this.events.emit('scene-ready');
   }
 
@@ -65,52 +87,31 @@ export class GameScene extends Phaser.Scene {
         this.renderEntities();
         this.renderOverlay();
       }),
-
-      eventBus.on('ENTITY_MOVED', () => this.renderEntities()),
+      eventBus.on('ENTITY_MOVED',          () => this.renderEntities()),
       eventBus.on('ENTITY_STATUS_CHANGED', () => this.renderEntities()),
-
-      eventBus.on('TURN_END', () => {
-        this.glitchFrame = false;
-        this.renderAll();
-      }),
-
-      eventBus.on('RED_DAY_ACTIVE', () => { this.redDayActive = true;  this.renderOverlay(); }),
-      eventBus.on('RED_DAY_CLEARED', () => { this.redDayActive = false; this.renderOverlay(); }),
-
-      eventBus.on('APM_ACTIVE', () => { this.apmActive = true;  this.renderOverlay(); }),
-      eventBus.on('APM_DEACTIVATE', () => { this.apmActive = false; this.renderOverlay(); }),
-
-      eventBus.on('FLOOR_AWAKENED', ({ floor }) => {
+      eventBus.on('TURN_END', () => { this.glitchFrame = false; this.renderAll(); }),
+      eventBus.on('RED_DAY_ACTIVE',   () => { this.redDayActive = true;  this.renderOverlay(); }),
+      eventBus.on('RED_DAY_CLEARED',  () => { this.redDayActive = false; this.renderOverlay(); }),
+      eventBus.on('APM_ACTIVE',       () => { this.apmActive = true;  this.renderOverlay(); }),
+      eventBus.on('APM_DEACTIVATE',   () => { this.apmActive = false; this.renderOverlay(); }),
+      eventBus.on('FLOOR_AWAKENED',   ({ floor }) => {
         if (floor === this.currentFloor) { this.floorAwakened = true; this.renderTiles(); }
       }),
-
       eventBus.on('PERSONA_GLITCH', ({ floor }) => {
-        if (floor === this.currentFloor) {
-          this.glitchFrame = true;
-          this.renderOverlay();
-          // Auto-clear after one frame
-          this.time.delayedCall(16, () => { this.glitchFrame = false; this.renderOverlay(); });
-        }
+        if (floor !== this.currentFloor) return;
+        this.glitchFrame = true; this.renderOverlay();
+        this.time.delayedCall(16, () => { this.glitchFrame = false; this.renderOverlay(); });
       }),
-
-      eventBus.on('RESONANCE_SHIFT', ({ current }) => {
-        // Darken overlay tint proportional to resonance
-        void current;
-        this.renderOverlay();
-      }),
-
+      eventBus.on('RESONANCE_SHIFT', ({ current }) => { void current; this.renderOverlay(); }),
       eventBus.on('ENV_SLIP', ({ pos }) => {
         if (pos.z === this.currentFloor) this.flashTile(pos.x, pos.y, 0xffffff, 0.15);
       }),
-
       eventBus.on('NOISE_EVENT', ({ origin, intensity }) => {
-        if (origin.z !== this.currentFloor) return;
-        this.pulseNoise(origin.x, origin.y, intensity);
+        if (origin.z === this.currentFloor) this.pulseNoise(origin.x, origin.y, intensity);
       }),
     );
   }
 
-  // Called by React when it hands us a new floor slice to render
   loadFloorData(tiles: WorldTile[][], floor: FloorIndex): void {
     this.currentTiles = tiles;
     this.currentFloor = floor;
@@ -125,59 +126,80 @@ export class GameScene extends Phaser.Scene {
   }
 
   private renderTiles(): void {
-    const g = this.tileGraphics;
+    this.tileRT.clear();
+    const g = this.tileDecorGfx;
     g.clear();
 
     for (let y = 0; y < this.currentTiles.length; y++) {
       const row = this.currentTiles[y];
       for (let x = 0; x < row.length; x++) {
-        const tile = row[x];
-        let color = TILE_COLORS[tile.type] ?? TILE_COLORS.FLOOR;
+        const tile  = row[x];
 
-        if (tile.incidentRecord) color = INCIDENT_TINT;
-        if (this.floorAwakened) color = blendColors(color, AWAKENED_TINT, 0.4);
-
-        g.fillStyle(color, 1);
-        g.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE - 1, TILE_SIZE - 1);
-
-        // Broadcast terminals: draw a faint pulse border
-        if (tile.type === 'BROADCAST_TERMINAL' || tile.type === 'TERMINAL') {
-          g.lineStyle(1, 0x334455, 0.6);
-          g.strokeRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE - 1, TILE_SIZE - 1);
+        // Draw sprite texture for FLOOR/VENT tiles; other types only show under their overlay
+        const frame = TILE_SPRITE_FRAMES[tile.type] ?? null;
+        if (frame !== null) {
+          this.tileRT.drawFrame('tileset', frame, x * SPRITE_SIZE, y * SPRITE_SIZE);
         }
 
-        // Low oxygen — draw oxygen indicator strip
+        // Color overlay — gives each tile type a distinct, legible color
+        const overlay = TILE_OVERLAYS[tile.type];
+        if (overlay) {
+          g.fillStyle(overlay.color, overlay.alpha);
+          g.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+        }
+
+        // Incident tile: red tint
+        if (tile.incidentRecord) {
+          g.fillStyle(0x3a0000, 0.55);
+          g.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+        }
+
+        // Terminal border hint
+        if (tile.type === 'TERMINAL' || tile.type === 'BROADCAST_TERMINAL') {
+          g.lineStyle(1, 0x8888cc, 0.6);
+          g.strokeRect(x * TILE_SIZE + 1, y * TILE_SIZE + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+        }
+
+        // Stairwell direction arrows (text)
+        if (tile.type === 'STAIRWELL') {
+          g.lineStyle(1, 0xccbb44, 0.8);
+          g.strokeRect(x * TILE_SIZE + 2, y * TILE_SIZE + 2, TILE_SIZE - 4, TILE_SIZE - 4);
+        }
+
+        // Low-oxygen strip at tile bottom
         if (tile.oxygenLevel < 50) {
-          const alpha = 1 - tile.oxygenLevel / 50;
-          g.fillStyle(0x880000, alpha * 0.5);
+          const alpha = (1 - tile.oxygenLevel / 50) * 0.5;
+          g.fillStyle(0x880000, alpha);
           g.fillRect(x * TILE_SIZE, y * TILE_SIZE + TILE_SIZE - 3, TILE_SIZE - 1, 3);
         }
       }
     }
+
+    if (this.floorAwakened) {
+      g.fillStyle(AWAKENED_TINT, 0.35);
+      g.fillRect(0, 0, this.scale.width, this.scale.height);
+    }
   }
 
   private renderEntities(): void {
-    const g = this.entityGraphics;
-    g.clear();
-    // Entities are rendered as small squares inside their tiles.
-    // Full entity data injected from React via renderEntityData().
+    // Entities are drawn by renderEntityData() — called externally by React
+    this.entityRT.clear();
+    this.entityBgGfx.clear();
   }
 
   renderEntityData(
     entities: Array<{ x: number; y: number; id: string; isGhost: boolean; isEnforcer: boolean; isPlayer: boolean }>,
   ): void {
-    const g = this.entityGraphics;
-    g.clear();
+    this.entityRT.clear();
+    this.entityBgGfx.clear();
     for (const e of entities) {
-      let color = ENTITY_COLOR;
-      if (e.isPlayer)   color = PLAYER_COLOR;
-      if (e.isGhost)    color = GHOST_COLOR;
-      if (e.isEnforcer) color = ENFORCER_COLOR;
-
-      const px = e.x * TILE_SIZE + 8;
-      const py = e.y * TILE_SIZE + 8;
-      g.fillStyle(color, e.isGhost ? 0.4 : 1);
-      g.fillRect(px, py, TILE_SIZE - 16, TILE_SIZE - 16);
+      const bgColor = e.isPlayer ? 0x00cc99 : e.isEnforcer ? 0xcc2222 : 0x887744;
+      const bgAlpha = e.isGhost ? 0.2 : 0.85;
+      this.entityBgGfx.fillStyle(bgColor, bgAlpha);
+      this.entityBgGfx.fillRect(e.x * TILE_SIZE + 4, e.y * TILE_SIZE + 4, TILE_SIZE - 8, TILE_SIZE - 8);
+      const key   = e.isPlayer ? 'inspector' : e.isEnforcer ? 'guard' : 'inmate';
+      const alpha = e.isGhost ? 0.35 : 1;
+      this.entityRT.drawFrame(key, 0, e.x * SPRITE_SIZE, e.y * SPRITE_SIZE, alpha);
     }
   }
 
@@ -196,17 +218,15 @@ export class GameScene extends Phaser.Scene {
     }
 
     if (this.glitchFrame) {
-      // Wireframe flash over every broadcast terminal
       for (let y = 0; y < this.currentTiles.length; y++) {
         const row = this.currentTiles[y];
         for (let x = 0; x < row.length; x++) {
           if (row[x]?.type === 'BROADCAST_TERMINAL') {
             g.lineStyle(1, 0x00ffff, 0.9);
             g.strokeRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-            // Draw wireframe grid inside tile
             g.lineStyle(1, 0x00ffff, 0.4);
-            g.lineBetween(x * TILE_SIZE, y * TILE_SIZE + TILE_SIZE / 2, x * TILE_SIZE + TILE_SIZE, y * TILE_SIZE + TILE_SIZE / 2);
-            g.lineBetween(x * TILE_SIZE + TILE_SIZE / 2, y * TILE_SIZE, x * TILE_SIZE + TILE_SIZE / 2, y * TILE_SIZE + TILE_SIZE);
+            g.lineBetween(x * TILE_SIZE, y * TILE_SIZE + TILE_SIZE / 2, (x + 1) * TILE_SIZE, y * TILE_SIZE + TILE_SIZE / 2);
+            g.lineBetween(x * TILE_SIZE + TILE_SIZE / 2, y * TILE_SIZE, x * TILE_SIZE + TILE_SIZE / 2, (y + 1) * TILE_SIZE);
           }
         }
       }
@@ -214,29 +234,23 @@ export class GameScene extends Phaser.Scene {
   }
 
   private flashTile(x: number, y: number, color = 0xffffff, alpha = 0.15): void {
-    const g = this.overlayGraphics;
-    g.fillStyle(color, alpha);
-    g.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE - 1, TILE_SIZE - 1);
+    this.overlayGraphics.fillStyle(color, alpha);
+    this.overlayGraphics.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE - 1, TILE_SIZE - 1);
     this.time.delayedCall(80, () => this.renderOverlay());
   }
 
   private pulseNoise(ox: number, oy: number, intensity: number): void {
-    // Origin flash — bright amber
     this.flashTile(ox, oy, 0xaa6600, 0.5);
-
-    // Ripple rings outward up to radius = floor(intensity / 2), fading
     const maxRadius = Math.min(Math.floor(intensity / 2), 5);
     for (let r = 1; r <= maxRadius; r++) {
       const alpha = 0.35 * (1 - r / (maxRadius + 1));
       this.time.delayedCall(r * 40, () => {
         for (let dx = -r; dx <= r; dx++) {
           for (let dy = -r; dy <= r; dy++) {
-            if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue; // ring edge only
-            const tx = ox + dx;
-            const ty = oy + dy;
-            const tile = this.currentTiles[ty]?.[tx];
+            if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
+            const tile = this.currentTiles[oy + dy]?.[ox + dx];
             if (!tile || tile.type === 'WALL' || tile.type === 'VOID') continue;
-            this.flashTile(tx, ty, 0xaa6600, alpha);
+            this.flashTile(ox + dx, oy + dy, 0xaa6600, alpha);
           }
         }
       });
@@ -247,13 +261,4 @@ export class GameScene extends Phaser.Scene {
     for (const unsub of this.unsubs) unsub();
     this.unsubs = [];
   }
-}
-
-function blendColors(a: number, b: number, t: number): number {
-  const ar = (a >> 16) & 0xff, ag = (a >> 8) & 0xff, ab = a & 0xff;
-  const br = (b >> 16) & 0xff, bg = (b >> 8) & 0xff, bb = b & 0xff;
-  const r = Math.round(ar + (br - ar) * t);
-  const gc = Math.round(ag + (bg - ag) * t);
-  const bl = Math.round(ab + (bb - ab) * t);
-  return (r << 16) | (gc << 8) | bl;
 }
