@@ -21,6 +21,7 @@ const TILE_SPRITE_FRAMES: Record<string, number | null> = {
   BROADCAST_TERMINAL: 152,  // row 9 col 8  — drawn under purple overlay
   STAIRWELL:          160,  // row 10 col 0 — drawn under olive overlay
   FACILITY_CONTROL:   176,  // row 11 col 0 — drawn under dark-purple overlay
+  DOOR:               null, // color-only; open/closed determines tint
   WALL:               null, // solid dark fill only — no sprite
   VOID:               null, // dark canvas background only
 };
@@ -36,6 +37,7 @@ const TILE_OVERLAYS: Record<string, { color: number; alpha: number } | null> = {
   BROADCAST_TERMINAL: { color: 0x52166a, alpha: 0.75 },
   STAIRWELL:          { color: 0x5c5010, alpha: 0.75 },
   FACILITY_CONTROL:   { color: 0x2a0a4a, alpha: 0.85 },
+  DOOR:               null, // rendered dynamically based on doorOpen state
 };
 
 const APM_OVERLAY   = 0x001a2a;
@@ -54,6 +56,8 @@ export class GameScene extends Phaser.Scene {
   private redDayActive  = false;
   private floorAwakened = false;
   private glitchFrame   = false;
+  private visibleTiles  = new Set<string>();
+  private exploredByFloor = new Map<number, Set<string>>();
   private unsubs: Array<() => void> = [];
 
   constructor() { super({ key: 'GameScene' }); }
@@ -83,9 +87,27 @@ export class GameScene extends Phaser.Scene {
         if (to.z !== this.currentFloor) {
           this.currentFloor = to.z as FloorIndex;
           this.floorAwakened = false;
+          this.visibleTiles = new Set();
+          this.visibleTiles = this.exploredByFloor.get(to.z) ? new Set() : new Set();
         }
         this.renderEntities();
         this.renderOverlay();
+      }),
+      eventBus.on('FOV_UPDATED', ({ floor, visibleTiles }) => {
+        if (floor !== this.currentFloor) return;
+        this.visibleTiles = new Set(visibleTiles as string[]);
+        let explored = this.exploredByFloor.get(floor);
+        if (!explored) { explored = new Set(); this.exploredByFloor.set(floor, explored); }
+        for (const key of visibleTiles as string[]) explored.add(key);
+        this.renderTiles();
+        this.renderEntities();
+      }),
+      eventBus.on('DOOR_TOGGLED', ({ pos, open }) => {
+        if ((pos as { z: number }).z !== this.currentFloor) return;
+        const p = pos as { x: number; y: number; z: number };
+        const tile = this.currentTiles[p.y]?.[p.x];
+        if (tile) tile.doorOpen = open as boolean;
+        this.renderTiles();
       }),
       eventBus.on('ENTITY_MOVED',          () => this.renderEntities()),
       eventBus.on('ENTITY_STATUS_CHANGED', () => this.renderEntities()),
@@ -130,21 +152,46 @@ export class GameScene extends Phaser.Scene {
     const g = this.tileDecorGfx;
     g.clear();
 
+    const useFOV = this.visibleTiles.size > 0;
+    const explored = this.exploredByFloor.get(this.currentFloor);
+
     for (let y = 0; y < this.currentTiles.length; y++) {
       const row = this.currentTiles[y];
       for (let x = 0; x < row.length; x++) {
-        const tile  = row[x];
+        const tile = row[x];
+        const key  = `${x},${y}`;
+        const isVisible  = !useFOV || this.visibleTiles.has(key);
+        const isExplored = !useFOV || (explored?.has(key) ?? false);
 
-        // Draw sprite texture for FLOOR/VENT tiles; other types only show under their overlay
+        // Never-seen tiles: render as solid black
+        if (useFOV && !isExplored) {
+          g.fillStyle(0x000000, 1.0);
+          g.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+          continue;
+        }
+
+        // Draw sprite texture
         const frame = TILE_SPRITE_FRAMES[tile.type] ?? null;
         if (frame !== null) {
           this.tileRT.drawFrame('tileset', frame, x * SPRITE_SIZE, y * SPRITE_SIZE);
         }
 
-        // Color overlay — gives each tile type a distinct, legible color
+        // Color overlay
         const overlay = TILE_OVERLAYS[tile.type];
         if (overlay) {
           g.fillStyle(overlay.color, overlay.alpha);
+          g.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+        }
+
+        // DOOR: amber when closed, dim passage when open
+        if (tile.type === 'DOOR') {
+          if (tile.doorOpen) {
+            g.fillStyle(0x3a2008, 0.5);
+          } else {
+            g.fillStyle(0x8b5a14, 1.0);
+            g.lineStyle(2, 0xccaa44, 0.8);
+            g.strokeRect(x * TILE_SIZE + 3, y * TILE_SIZE + 3, TILE_SIZE - 6, TILE_SIZE - 6);
+          }
           g.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
         }
 
@@ -160,7 +207,7 @@ export class GameScene extends Phaser.Scene {
           g.strokeRect(x * TILE_SIZE + 1, y * TILE_SIZE + 1, TILE_SIZE - 2, TILE_SIZE - 2);
         }
 
-        // Stairwell direction arrows (text)
+        // Stairwell border
         if (tile.type === 'STAIRWELL') {
           g.lineStyle(1, 0xccbb44, 0.8);
           g.strokeRect(x * TILE_SIZE + 2, y * TILE_SIZE + 2, TILE_SIZE - 4, TILE_SIZE - 4);
@@ -171,6 +218,12 @@ export class GameScene extends Phaser.Scene {
           const alpha = (1 - tile.oxygenLevel / 50) * 0.5;
           g.fillStyle(0x880000, alpha);
           g.fillRect(x * TILE_SIZE, y * TILE_SIZE + TILE_SIZE - 3, TILE_SIZE - 1, 3);
+        }
+
+        // Memory fog: explored but not currently visible
+        if (useFOV && !isVisible) {
+          g.fillStyle(0x000000, 0.6);
+          g.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
         }
       }
     }
@@ -192,7 +245,9 @@ export class GameScene extends Phaser.Scene {
   ): void {
     this.entityRT.clear();
     this.entityBgGfx.clear();
+    const useFOV = this.visibleTiles.size > 0;
     for (const e of entities) {
+      if (useFOV && !e.isPlayer && !this.visibleTiles.has(`${e.x},${e.y}`)) continue;
       const bgColor = e.isPlayer ? 0x00cc99 : e.isEnforcer ? 0xcc2222 : 0x887744;
       const bgAlpha = e.isGhost ? 0.2 : 0.85;
       this.entityBgGfx.fillStyle(bgColor, bgAlpha);

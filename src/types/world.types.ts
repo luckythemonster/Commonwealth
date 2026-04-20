@@ -36,7 +36,8 @@ export type TileType =
   | 'STAIRWELL'
   | 'FACILITY_CONTROL'
   | 'BROADCAST_TERMINAL'
-  | 'VOID';
+  | 'VOID'
+  | 'DOOR';
 
 export interface Vec3 {
   x: number;
@@ -54,6 +55,7 @@ export interface WorldTile {
   hasComplianceMonitor: boolean;
   sensorNodeId?: string; // MIRADOR sensor node ID if present
   incidentRecord?: string; // e.g. "IRIA_CALA / INCIDENT_RECORD / 2193.09.23"
+  doorOpen?: boolean;    // DOOR tiles only; true = passable + transparent
 }
 
 export interface Annotation {
@@ -169,6 +171,8 @@ export interface WorldState {
   globalEnergyQuota: number;
   redDayActive: boolean;
   sensorNodesActive: boolean[];       // One per floor; disabling breaks LIVE_STREAM
+  visibleTiles: Set<string>;          // "x,y" keys visible on current floor
+  exploredByFloor: Map<number, Set<string>>; // persistent explored tiles per floor
 }
 
 export type ActionType =

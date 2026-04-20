@@ -1,10 +1,23 @@
 // WorldEngine player actions — AP deduction, alignment, shutdown, maintenance.
 
 import { eventBus } from './EventBus';
+import { calculateFOV } from './fov';
 import type {
   WorldState, ActionType, EntityId, FloorIndex, Vec3,
 } from '../types/world.types';
 import { AP_COST } from '../types/world.types';
+
+export function updateFOV(state: WorldState): void {
+  const { pos } = state.playerState;
+  const floorTiles = state.grid[pos.z];
+  if (!floorTiles) return;
+  const visible = calculateFOV(floorTiles, pos.x, pos.y);
+  state.visibleTiles = visible;
+  let explored = state.exploredByFloor.get(pos.z);
+  if (!explored) { explored = new Set(); state.exploredByFloor.set(pos.z, explored); }
+  for (const key of visible) explored.add(key);
+  eventBus.emit('FOV_UPDATED', { floor: pos.z, visibleTiles: Array.from(visible) });
+}
 
 // Returns false if insufficient AP.
 export function deductAP(state: WorldState, action: ActionType): boolean {
@@ -35,7 +48,8 @@ export function movePlayer(state: WorldState, to: Vec3): boolean {
   if (!deductAP(state, 'MOVE')) return false;
   const from = { ...state.playerState.pos };
   state.playerState.pos = to;
-  state.playerState.deviationLogCount++; // every action tracked
+  state.playerState.deviationLogCount++;
+  updateFOV(state);
   eventBus.emit('PLAYER_MOVED', { from, to });
   return true;
 }
@@ -44,7 +58,17 @@ export function ventTraverse(state: WorldState, to: Vec3): boolean {
   if (!deductAP(state, 'VENT_TRAVERSE')) return false;
   const from = { ...state.playerState.pos };
   state.playerState.pos = to;
+  updateFOV(state);
   eventBus.emit('PLAYER_MOVED', { from, to });
+  return true;
+}
+
+export function toggleDoor(state: WorldState, pos: Vec3): boolean {
+  const tile = state.grid[pos.z]?.[pos.y]?.[pos.x];
+  if (!tile || tile.type !== 'DOOR') return false;
+  tile.doorOpen = !tile.doorOpen;
+  updateFOV(state);
+  eventBus.emit('DOOR_TOGGLED', { pos, open: tile.doorOpen });
   return true;
 }
 

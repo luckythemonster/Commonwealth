@@ -152,6 +152,8 @@ export function buildInitialWorldState(): WorldState {
     globalEnergyQuota: 100,
     redDayActive: false,
     sensorNodesActive: new Array(12).fill(true),
+    visibleTiles: new Set<string>(),
+    exploredByFloor: new Map<number, Set<string>>(),
   };
 }
 

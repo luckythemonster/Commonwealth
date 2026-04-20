@@ -25,6 +25,7 @@ export function useInput({ onRefresh, onOpenTerminal, onEndTurn }: Options) {
     // Bounds check
     const tile = state.grid[to.z]?.[to.y]?.[to.x];
     if (!tile || tile.type === 'WALL' || tile.type === 'VOID') return;
+    if (tile.type === 'DOOR' && tile.doorOpen !== true) return;
 
     // Already on a vent layer — all horizontal movement is vent traversal
     if (VENT_FLOORS[pos.z]) {
@@ -59,6 +60,16 @@ export function useInput({ onRefresh, onOpenTerminal, onEndTurn }: Options) {
       const floorZ = (pos.z - 1) as FloorIndex;
       const ok = worldEngine.move({ x: pos.x, y: pos.y, z: floorZ });
       if (ok) { onRefresh(floorZ); return; }
+    }
+
+    // Door toggle — check 4-cardinal adjacents first
+    for (const { dx, dy } of [{ dx:0,dy:-1},{dx:0,dy:1},{dx:-1,dy:0},{dx:1,dy:0}]) {
+      const dt = state.grid[pos.z]?.[pos.y + dy]?.[pos.x + dx];
+      if (dt?.type === 'DOOR') {
+        worldEngine.toggleDoor({ x: pos.x + dx, y: pos.y + dy, z: pos.z });
+        onRefresh(pos.z as FloorIndex);
+        return;
+      }
     }
 
     // Check all adjacent + same tile for named entities and terminals

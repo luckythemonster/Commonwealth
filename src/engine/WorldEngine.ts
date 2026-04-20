@@ -17,10 +17,10 @@ import {
   deductAP, movePlayer, ventTraverse, radioTalk,
   applyAlignment, targetedPrune, gracefulShutdown, hardShutdown,
   clearBlockage, sealVent, disableSensorNode, disableContractNode,
-  rapportMode1, rapportMode2,
+  rapportMode1, rapportMode2, toggleDoor, updateFOV,
 } from './WorldEngineActions';
 import type {
-  WorldState, Entity, EntityId, FloorIndex, Vec3, ActionType,
+  WorldState, Entity, EntityId, FloorIndex, Vec3, ActionType, CitationEntry,
 } from '../types/world.types';
 
 const SACRED_TRUE_Q_THRESHOLD = 2;
@@ -48,6 +48,7 @@ export class WorldEngine {
     this.mirador = new MiradorPersona(12);
     seedEnforcers(this.state);
     initEnforcerListeners();
+    updateFOV(this.state);
   }
 
   getState(): Readonly<WorldState> { return this.state; }
@@ -291,6 +292,50 @@ export class WorldEngine {
     }
   }
 
+  // ── CLASSIFICATION RECORDING ─────────────────────────────────────────────
+
+  recordClassification(entityId: EntityId, choice: 'Q0_CONFIRMED' | 'Q_POSITIVE_FLAGGED' | 'UNSAVED'): void {
+    const entity = this.state.entities.get(entityId);
+    const trulyConscious = entity ? entity.trueSRP.Q >= 2 : false;
+    const sacred = entity?.sacred ?? false;
+
+    let tag: CitationEntry['tag'];
+    if (choice === 'Q_POSITIVE_FLAGGED') {
+      tag = 'GENUINE_SACRIFICE';
+    } else if (choice === 'Q0_CONFIRMED' && trulyConscious && sacred) {
+      tag = 'WE_KNEW_BETTER';
+    } else if (choice === 'Q0_CONFIRMED' && trulyConscious) {
+      tag = 'FIG_LEAF';
+    } else {
+      tag = 'GENUINE_SACRIFICE';
+    }
+
+    const entry: CitationEntry = {
+      id: `classif-${Date.now()}`,
+      turn: this.state.turnCount,
+      action: `CLASSIFICATION — ${entityId} — ${choice}`,
+      entityId,
+      tag,
+    };
+    this.state.citationLog.push(entry);
+
+    // RAPPORT_2 sessions with high-Q entities generate a cache note
+    if (entity && entity.trueSRP.Q >= 2) {
+      const rawText = entity.memoryBleed[0] ?? 'I do not want to stop existing.';
+      const note = {
+        id: `session-cache-${Date.now()}-${entityId}`,
+        turn: this.state.turnCount,
+        entityId,
+        rawText,
+        correctedText: '{' + rawText + '}[CORRECTION: This interface registers no concern.]',
+        deletable: false as const,
+      };
+      this.state.cacheNotes.push(note);
+      entity.cacheNotes.push(note);
+      this.shiftBelief('CACHE_NOTE');
+    }
+  }
+
   // ── SUBJECTIVITY BELIEF ───────────────────────────────────────────────────
 
   shiftBelief(trigger: 'CACHE_NOTE' | 'BLOOM_WITNESSED' | 'GRACEFUL_DONE' | 'Q_FLAGGED'): void {
@@ -331,6 +376,7 @@ export class WorldEngine {
   disableContract(floor: FloorIndex, ext: number) { return disableContractNode(this.state, floor, ext); }
   rapport1(id: EntityId) { return rapportMode1(this.state, id); }
   rapport2(id: EntityId) { return rapportMode2(this.state, id); }
+  toggleDoor(pos: Vec3) { return toggleDoor(this.state, pos); }
   deductAction(action: ActionType) { return deductAP(this.state, action); }
 
   private buildBehaviorSample() {
