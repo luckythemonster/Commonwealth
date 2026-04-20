@@ -44,14 +44,18 @@ function fillFloor(z: number, overrides: Record<string, Partial<WorldTile>> = {}
   return floor;
 }
 
-function fillVentLayer(z: number): WorldTile[][] {
+function fillVentLayer(z: number, grates: Set<string> = new Set()): WorldTile[][] {
   const floor: WorldTile[][] = [];
   for (let y = 0; y < FLOOR_HEIGHT; y++) {
     const row: WorldTile[] = [];
     for (let x = 0; x < FLOOR_WIDTH; x++) {
-      // Vent passages form a grid every 3 tiles
-      const isPassage = x % 3 === 0 || y % 3 === 0;
-      row.push(makeTile(x, y, z, isPassage ? 'VENT_PASSAGE' : 'VOID'));
+      // Grate positions mirror the VENT_ENTRY tiles from the floor above
+      if (grates.has(`${x},${y}`)) {
+        row.push(makeTile(x, y, z, 'VENT_ENTRY'));
+      } else {
+        const isPassage = x % 3 === 0 || y % 3 === 0;
+        row.push(makeTile(x, y, z, isPassage ? 'VENT_PASSAGE' : 'VOID'));
+      }
     }
     floor.push(row);
   }
@@ -173,10 +177,17 @@ function buildGrid(): WorldTile[][][] {
   const grid: WorldTile[][][] = [];
   for (let z = 0; z < 12; z++) {
     if (z % 2 === 1) {
-      // Odd index: vent layer
-      grid.push(fillVentLayer(z));
+      // Vent layer — stamp VENT_ENTRY tiles wherever the floor above has grates
+      const floorAbove = grid[z - 1];
+      const grates = new Set<string>();
+      for (const row of floorAbove) {
+        for (const tile of row) {
+          if (tile.type === 'VENT_ENTRY') grates.add(`${tile.pos.x},${tile.pos.y}`);
+        }
+      }
+      grid.push(fillVentLayer(z, grates));
     } else {
-      // Even index: primary floor
+      // Primary floor
       const overrides: Record<number, Record<string, Partial<WorldTile>>> = {
         0:  floor0Overrides,
         2:  floor2Overrides,

@@ -61,14 +61,12 @@ export function useInput({ onRefresh, onOpenTerminal, onEndTurn }: Options) {
       }
     }
 
-    // Vent exit: E on a vent tile that sits under a VENT_ENTRY returns to the floor above
-    if (pos.z % 2 === 1) {
+    // Vent exit: E on a VENT_ENTRY tile in the vent layer exits to the floor above.
+    // These green grate tiles mirror the VENT_ENTRY positions stamped at grid build time.
+    if (pos.z % 2 === 1 && selfTile?.type === 'VENT_ENTRY') {
       const floorZ = (pos.z - 1) as FloorIndex;
-      const exitTile = state.grid[floorZ]?.[pos.y]?.[pos.x];
-      if (exitTile?.type === 'VENT_ENTRY') {
-        const ok = worldEngine.move({ x: pos.x, y: pos.y, z: floorZ });
-        if (ok) { onRefresh(floorZ); return; }
-      }
+      const ok = worldEngine.move({ x: pos.x, y: pos.y, z: floorZ });
+      if (ok) { onRefresh(floorZ); return; }
     }
 
     // Check all adjacent + same tile for named entities and terminals
