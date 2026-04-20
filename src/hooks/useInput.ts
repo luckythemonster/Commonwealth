@@ -1,5 +1,5 @@
 // useInput — keyboard handler for Sol's movement and interactions.
-// Arrow keys: grid movement (x/y). W/S: floor navigation on stairwells. A/D: strafe x.
+// Arrow keys: grid movement (x/y). W/S: floor navigation on stairwells.
 // E: interact / enter-exit vent. T: end turn.
 // All actions route through worldEngine — no state owned here.
 
@@ -116,8 +116,6 @@ export function useInput({ onRefresh, onOpenTerminal, onEndTurn }: Options) {
         case 'ArrowDown':  tryMove(0,  1);   break;
         case 'ArrowLeft':  tryMove(-1, 0);   break;
         case 'ArrowRight': tryMove(1,  0);   break;
-        case 'a': case 'A': tryMove(-1, 0);  break;
-        case 'd': case 'D': tryMove(1,  0);  break;
         case 'w': case 'W': tryChangeFloor(-1); break;
         case 's': case 'S': tryChangeFloor(1);  break;
         case 'e': case 'E': tryInteract();   break;
