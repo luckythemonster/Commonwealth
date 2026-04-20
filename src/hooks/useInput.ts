@@ -1,5 +1,5 @@
 // useInput — keyboard handler for Sol's movement and interactions.
-// Arrow/WASD: move. E: interact / enter-exit vent. T: end turn.
+// Arrow/WASD: move. W/S on stairwell tile = change floor. E: interact / enter-exit vent. T: end turn.
 // All actions route through worldEngine — no state owned here.
 
 import { useEffect, useCallback } from 'react';
@@ -21,6 +21,16 @@ export function useInput({ onRefresh, onOpenTerminal, onEndTurn }: Options) {
     const { pos } = state.playerState;
     const to: Vec3 = { x: pos.x + dx, y: pos.y + dy, z: pos.z };
 
+    // Already on a stairwell: W/S navigates floors directly (W=up, S=down)
+    const selfTile = state.grid[pos.z]?.[pos.y]?.[pos.x];
+    if (selfTile?.type === 'STAIRWELL' && dx === 0 && dy !== 0) {
+      const newZ = pos.z + (dy < 0 ? -2 : 2);
+      if (newZ < 0 || newZ > 10) return;
+      const ok = worldEngine.move({ x: pos.x, y: pos.y, z: newZ as FloorIndex });
+      if (ok) onRefresh(newZ as FloorIndex);
+      return;
+    }
+
     // Bounds check
     const tile = state.grid[to.z]?.[to.y]?.[to.x];
     if (!tile || tile.type === 'WALL' || tile.type === 'VOID') return;
@@ -32,7 +42,7 @@ export function useInput({ onRefresh, onOpenTerminal, onEndTurn }: Options) {
       return;
     }
 
-    // Stairwell: step ±2 to skip the vent layer between floors, vertical only
+    // Walking INTO a stairwell from an adjacent tile
     if (tile.type === 'STAIRWELL' && dy !== 0) {
       const dir = dy < 0 ? -2 : 2;
       const newZ = Math.max(0, Math.min(10, pos.z + dir)) as FloorIndex;
@@ -51,21 +61,6 @@ export function useInput({ onRefresh, onOpenTerminal, onEndTurn }: Options) {
     const { pos } = state.playerState;
 
     const selfTile = state.grid[pos.z]?.[pos.y]?.[pos.x];
-
-    // STAIRWELL: E goes up (z-2) if available, down (z+2) otherwise.
-    // W/S on an adjacent stairwell tile also works for directional control.
-    if (selfTile?.type === 'STAIRWELL') {
-      const upZ = pos.z - 2;
-      const downZ = pos.z + 2;
-      if (upZ >= 0) {
-        const ok = worldEngine.move({ x: pos.x, y: pos.y, z: upZ as FloorIndex });
-        if (ok) { onRefresh(upZ as FloorIndex); return; }
-      }
-      if (downZ <= 10) {
-        const ok = worldEngine.move({ x: pos.x, y: pos.y, z: downZ as FloorIndex });
-        if (ok) { onRefresh(downZ as FloorIndex); return; }
-      }
-    }
 
     // VENT_ENTRY: E on a grate tile enters the vent layer below (z+1)
     if (selfTile?.type === 'VENT_ENTRY' && pos.z % 2 === 0) {
