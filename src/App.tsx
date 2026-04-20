@@ -53,7 +53,6 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    worldEngine.initWorld();
     const game = new Phaser.Game({
       type: Phaser.AUTO,
       width: CANVAS_W, height: CANVAS_H,
