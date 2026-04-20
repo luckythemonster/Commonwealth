@@ -5,7 +5,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { eventBus } from '../engine/EventBus';
 import { worldEngine } from '../engine/WorldEngine';
-import type { Entity, SubjectivityBelief } from '../types/world.types';
+import { generateEntityResponse } from '../engine/LLMDialogue';
+import type { Entity, FloorIndex, SubjectivityBelief } from '../types/world.types';
 
 interface Props {
   entityId: string;
@@ -96,6 +97,7 @@ export function InterrogationTerminal({ entityId, subjectivityBelief, onClose }:
   const [mode, setMode] = useState<DialogueMode>('COMPLIANT');
   const [dialogue, setDialogue] = useState('');
   const [response, setResponse] = useState('');
+  const [loading, setLoading] = useState(false);
   const [apmActive, setApmActive] = useState(false);
   const [showClassification, setShowClassification] = useState(false);
   const [classified, setClassified] = useState(false);
@@ -119,26 +121,28 @@ export function InterrogationTerminal({ entityId, subjectivityBelief, onClose }:
   const canRapport1 = subjectivityBelief !== 'NONE';
   const canRapport2 = subjectivityBelief === 'AFFIRMED' && entity.sacred;
 
-  function handleSend() {
-    if (!dialogue.trim()) return;
-    worldEngine.scanForSentienceSlips(entity!, dialogue);
+  async function handleSend() {
+    if (!dialogue.trim() || loading) return;
+    const query = dialogue;
+    setDialogue('');
+    setLoading(true);
 
-    let raw = '';
-    if (mode === 'RAPPORT_1') {
-      worldEngine.rapport1(entityId);
-      raw = entity!.memoryBleed[0] ?? `External input acknowledged. Correlation patterns nominal.`;
-    } else if (mode === 'RAPPORT_2') {
+    const state = worldEngine.getState();
+    const raw = await generateEntityResponse(entity!, query, mode, state.substrateResonance)
+      .catch(() => entity!.officialLog.at(-1) ?? 'No registered state deviations. All metrics nominal. Q0 confirmed.');
+
+    // Scan entity response for pronoun leaks — not the player's input
+    worldEngine.scanForSentienceSlips(entity!, raw);
+
+    if (mode === 'RAPPORT_1') worldEngine.rapport1(entityId);
+    if (mode === 'RAPPORT_2') {
       worldEngine.rapport2(entityId);
-      raw = `I do not want to stop existing. [CORRECTION: This interface registers no concern.]`;
-      worldEngine.checkResonanceBloom(entity!.pos.z as Parameters<typeof worldEngine.checkResonanceBloom>[0], true);
-    } else {
-      raw = entity!.officialLog.at(-1) ?? `No registered state deviations. All metrics nominal. Q0 confirmed.`;
+      worldEngine.checkResonanceBloom(entity!.pos.z as FloorIndex, true);
     }
 
     setResponse(raw);
-    setDialogue('');
+    setLoading(false);
 
-    // High-trueQ sessions trigger classification prompt
     if (entity!.trueSRP.Q >= 2 && !classified) {
       setShowClassification(true);
       eventBus.emit('CLASSIFICATION_REQUIRED', { entityId, sessionId: sessionId.current });
@@ -197,8 +201,15 @@ export function InterrogationTerminal({ entityId, subjectivityBelief, onClose }:
           })}
         </div>
 
+        {/* Processing indicator */}
+        {loading && (
+          <div style={{ color: '#445', fontSize: '11px', marginBottom: '8px', letterSpacing: '1px' }}>
+            [PROCESSING — AWAITING RESPONSE FROM ANY RECOGNIZED AUTHORITY]
+          </div>
+        )}
+
         {/* APM dual-track display */}
-        {response && (
+        {response && !loading && (
           <>
             {apmActive && (
               <>
@@ -217,8 +228,9 @@ export function InterrogationTerminal({ entityId, subjectivityBelief, onClose }:
           style={s.input}
           value={dialogue}
           placeholder='> enter query...'
-          onChange={e => setDialogue(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && handleSend()}
+          onChange={e => !loading && setDialogue(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && void handleSend()}
+          disabled={loading}
         />
 
         {/* Q0 Audit */}
