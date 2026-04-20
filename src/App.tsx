@@ -19,8 +19,8 @@ const sideBtn: React.CSSProperties = {
 };
 
 const FLOOR_LABELS: Record<number, string> = {
-  0: '[ADMIN/MIRADOR]', 2: '[INTAKE]', 4: '[RING C]',
-  6: '[RESIDENTIAL]',   8: '[ARCHIVE]', 10: '[OPERATIONS]',
+  0: '[ADMIN/MIRADOR]', 2: '[NW-SMAC-01]', 4: '[RING C]',
+  6: '[RESIDENTIAL]',   8: '[ARCHIVE]',    10: '[OPERATIONS]',
 };
 
 export default function App() {
@@ -53,12 +53,11 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    worldEngine.initWorld();
     const game = new Phaser.Game({
       type: Phaser.AUTO,
       width: CANVAS_W, height: CANVAS_H,
       parent: canvasRef.current ?? undefined,
-      backgroundColor: '#050809',
+      backgroundColor: '#0c1520',
       scene: [GameScene],
     });
     game.events.once('ready', () => {

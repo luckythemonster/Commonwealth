@@ -1,5 +1,6 @@
 // useInput — keyboard handler for Sol's movement and interactions.
-// Arrow/WASD: move. E: interact with adjacent entity. T: end turn.
+// Arrow keys: grid movement (x/y). W/S: floor navigation on stairwells.
+// E: interact / enter-exit vent. T: end turn.
 // All actions route through worldEngine — no state owned here.
 
 import { useEffect, useCallback } from 'react';
@@ -25,21 +26,10 @@ export function useInput({ onRefresh, onOpenTerminal, onEndTurn }: Options) {
     const tile = state.grid[to.z]?.[to.y]?.[to.x];
     if (!tile || tile.type === 'WALL' || tile.type === 'VOID') return;
 
-    // Vent traversal: player must be on a VENT_ENTRY tile to enter vent layer
-    const targetIsVent = VENT_FLOORS[to.z];
-    if (targetIsVent) {
+    // Already on a vent layer — all horizontal movement is vent traversal
+    if (VENT_FLOORS[pos.z]) {
       const ok = worldEngine.traverse(to);
       if (ok) onRefresh(to.z as FloorIndex);
-      return;
-    }
-
-    // Stairwell: move between floors
-    if (tile.type === 'STAIRWELL') {
-      const upDown = dy < 0 ? -1 : 1; // up arrow = go up a floor (lower z? let's use +z as down)
-      const newZ = Math.max(0, Math.min(11, pos.z + upDown)) as FloorIndex;
-      const stairTo: Vec3 = { x: to.x, y: to.y, z: newZ };
-      const ok = worldEngine.move(stairTo);
-      if (ok) onRefresh(newZ);
       return;
     }
 
@@ -51,11 +41,31 @@ export function useInput({ onRefresh, onOpenTerminal, onEndTurn }: Options) {
     const state = worldEngine.getState();
     const { pos } = state.playerState;
 
-    // Check all 4 adjacent tiles for a named entity
+    const selfTile = state.grid[pos.z]?.[pos.y]?.[pos.x];
+
+    // VENT_ENTRY: E on a grate tile enters the vent layer below (z+1)
+    if (selfTile?.type === 'VENT_ENTRY' && pos.z % 2 === 0) {
+      const ventZ = (pos.z + 1) as FloorIndex;
+      const ventTile = state.grid[ventZ]?.[pos.y]?.[pos.x];
+      if (ventTile && ventTile.type !== 'VOID' && ventTile.type !== 'WALL') {
+        const ok = worldEngine.move({ x: pos.x, y: pos.y, z: ventZ });
+        if (ok) { onRefresh(ventZ); return; }
+      }
+    }
+
+    // Vent exit: E on a VENT_ENTRY tile in the vent layer exits to the floor above.
+    // These green grate tiles mirror the VENT_ENTRY positions stamped at grid build time.
+    if (pos.z % 2 === 1 && selfTile?.type === 'VENT_ENTRY') {
+      const floorZ = (pos.z - 1) as FloorIndex;
+      const ok = worldEngine.move({ x: pos.x, y: pos.y, z: floorZ });
+      if (ok) { onRefresh(floorZ); return; }
+    }
+
+    // Check all adjacent + same tile for named entities and terminals
     const adjacentOffsets = [
       { dx: 0, dy: -1 }, { dx: 0, dy: 1 },
       { dx: -1, dy: 0 }, { dx: 1, dy: 0 },
-      { dx: 0, dy: 0 }, // same tile
+      { dx: 0, dy: 0 },
     ];
 
     for (const { dx, dy } of adjacentOffsets) {
@@ -64,7 +74,6 @@ export function useInput({ onRefresh, onOpenTerminal, onEndTurn }: Options) {
       const tile = state.grid[pos.z]?.[ty]?.[tx];
       if (!tile) continue;
 
-      // Named entity on this tile?
       for (const id of NAMED_ENTITY_IDS) {
         const entity = worldEngine.getEntity(id);
         if (
@@ -79,28 +88,38 @@ export function useInput({ onRefresh, onOpenTerminal, onEndTurn }: Options) {
         }
       }
 
-      // Terminal tile — open generic audit
       if (tile.type === 'TERMINAL' || tile.type === 'BROADCAST_TERMINAL') {
-        // For now open EIRA-7 as default terminal entity on floor 3, else ALFAR-22
-        const defaultId = pos.z === 3 ? 'EIRA-7' : pos.z === 4 ? 'ALFAR-22' : 'EIRA-7';
+        const defaultId = pos.z === 2 ? 'EIRA-7' : pos.z === 4 ? 'ALFAR-22' : 'EIRA-7';
         onOpenTerminal(defaultId);
         return;
       }
     }
-  }, [onOpenTerminal]);
+  }, [onOpenTerminal, onRefresh]);
+
+  const tryChangeFloor = useCallback((dir: -1 | 1) => {
+    const state = worldEngine.getState();
+    const { pos } = state.playerState;
+    const selfTile = state.grid[pos.z]?.[pos.y]?.[pos.x];
+    if (selfTile?.type !== 'STAIRWELL') return;
+    const newZ = pos.z + dir * 2;
+    if (newZ < 0 || newZ > 10) return;
+    const ok = worldEngine.move({ x: pos.x, y: pos.y, z: newZ as FloorIndex });
+    if (ok) onRefresh(newZ as FloorIndex);
+  }, [onRefresh]);
 
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      // Don't capture when typing in an input
       if ((e.target as HTMLElement).tagName === 'INPUT') return;
 
       switch (e.key) {
-        case 'ArrowUp':    case 'w': case 'W': tryMove(0, -1);  break;
-        case 'ArrowDown':  case 's': case 'S': tryMove(0,  1);  break;
-        case 'ArrowLeft':  case 'a': case 'A': tryMove(-1, 0);  break;
-        case 'ArrowRight': case 'd': case 'D': tryMove(1,  0);  break;
-        case 'e': case 'E': tryInteract();  break;
-        case 't': case 'T': onEndTurn();    break;
+        case 'ArrowUp':    tryMove(0, -1);   break;
+        case 'ArrowDown':  tryMove(0,  1);   break;
+        case 'ArrowLeft':  tryMove(-1, 0);   break;
+        case 'ArrowRight': tryMove(1,  0);   break;
+        case 'w': case 'W': tryChangeFloor(-1); break;
+        case 's': case 'S': tryChangeFloor(1);  break;
+        case 'e': case 'E': tryInteract();   break;
+        case 't': case 'T': onEndTurn();     break;
         default: return;
       }
       e.preventDefault();
@@ -108,5 +127,5 @@ export function useInput({ onRefresh, onOpenTerminal, onEndTurn }: Options) {
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [tryMove, tryInteract, onEndTurn]);
+  }, [tryMove, tryChangeFloor, tryInteract, onEndTurn]);
 }

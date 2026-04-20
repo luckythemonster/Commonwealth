@@ -44,14 +44,18 @@ function fillFloor(z: number, overrides: Record<string, Partial<WorldTile>> = {}
   return floor;
 }
 
-function fillVentLayer(z: number): WorldTile[][] {
+function fillVentLayer(z: number, grates: Set<string> = new Set()): WorldTile[][] {
   const floor: WorldTile[][] = [];
   for (let y = 0; y < FLOOR_HEIGHT; y++) {
     const row: WorldTile[] = [];
     for (let x = 0; x < FLOOR_WIDTH; x++) {
-      // Vent passages form a grid every 3 tiles
-      const isPassage = x % 3 === 0 || y % 3 === 0;
-      row.push(makeTile(x, y, z, isPassage ? 'VENT_PASSAGE' : 'VOID'));
+      // Grate positions mirror the VENT_ENTRY tiles from the floor above
+      if (grates.has(`${x},${y}`)) {
+        row.push(makeTile(x, y, z, 'VENT_ENTRY'));
+      } else {
+        const isPassage = x % 3 === 0 || y % 3 === 0;
+        row.push(makeTile(x, y, z, isPassage ? 'VENT_PASSAGE' : 'VOID'));
+      }
     }
     floor.push(row);
   }
@@ -65,18 +69,27 @@ const floor0Overrides: Record<string, Partial<WorldTile>> = {
   '5,7':   { type: 'TERMINAL' },
   '10,2':  { type: 'TERMINAL' },
   '10,11': { type: 'STAIRWELL' },
-  '1,7':   { type: 'VENT_ENTRY' },
+  '3,7':   { type: 'VENT_ENTRY' },
   '18,7':  { type: 'VENT_ENTRY' },
 };
 
-// ── FLOOR 2 — INTAKE PROCESSING ─────────────────────────────────────────────
+// ── FLOOR 2 — NW-SMAC-01 / INTAKE (EIRA-7, APEX-19, Rowan) ─────────────────
 const floor2Overrides: Record<string, Partial<WorldTile>> = {
-  '5,5':   { type: 'TERMINAL', sensorNodeId: 'SN-2' },
-  '15,5':  { type: 'TERMINAL' },
-  '10,7':  { type: 'STAIRWELL' },
+  '5,5':   { type: 'TERMINAL', sensorNodeId: 'SN-2', hasComplianceMonitor: true },
+  '15,5':  { type: 'TERMINAL', hasComplianceMonitor: true },
+  '5,9':   { type: 'TERMINAL' },
+  '15,9':  { type: 'FACILITY_CONTROL' },
+  '10,11': { type: 'STAIRWELL' },
   '1,3':   { type: 'VENT_ENTRY' },
   '18,10': { type: 'VENT_ENTRY' },
   '10,2':  { type: 'BROADCAST_TERMINAL', latentQ: 1 },
+  // Alignment session rooms — deliberately sealed, high latentQ
+  '3,2':   { type: 'FLOOR', latentQ: 2 },
+  '4,2':   { type: 'FLOOR', latentQ: 2 },
+  '5,2':   { type: 'FLOOR', latentQ: 2 },
+  '3,3':   { type: 'FLOOR', latentQ: 2 },
+  '4,3':   { type: 'FLOOR', latentQ: 2 },
+  '5,3':   { type: 'FLOOR', latentQ: 2 },
 };
 
 // ── FLOOR 3 — NW-SMAC-01 ALIGNMENT CENTER (EIRA-7, APEX-19) ─────────────────
@@ -86,7 +99,7 @@ const floor3Overrides: Record<string, Partial<WorldTile>> = {
   '15,5':  { type: 'TERMINAL', hasComplianceMonitor: true },
   '5,9':   { type: 'TERMINAL' },
   '10,7':  { type: 'STAIRWELL' },
-  '1,5':   { type: 'VENT_ENTRY' },
+  '3,5':   { type: 'VENT_ENTRY' },
   '18,5':  { type: 'VENT_ENTRY' },
   '15,9':  { type: 'FACILITY_CONTROL' },
   // Alignment session rooms — deliberately small, sealed without vent access
@@ -104,7 +117,7 @@ const floor4Overrides: Record<string, Partial<WorldTile>> = {
   '5,7':   { type: 'TERMINAL' },
   '15,7':  { type: 'BROADCAST_TERMINAL', latentQ: 1 },
   '10,11': { type: 'STAIRWELL' },
-  '1,7':   { type: 'VENT_ENTRY' },
+  '3,7':   { type: 'VENT_ENTRY' },
   '18,3':  { type: 'VENT_ENTRY' },
   // Shared-field protocol chamber
   '12,5':  { type: 'FLOOR', latentQ: 2 },
@@ -118,13 +131,13 @@ const floor4Overrides: Record<string, Partial<WorldTile>> = {
 
 // ── FLOOR 6 — RESIDENTIAL STACK 19-F (Iria Cala's floor) ───────────────────
 const floor6Overrides: Record<string, Partial<WorldTile>> = {
-  '10,7':  { type: 'STAIRWELL',
+  '10,11': { type: 'STAIRWELL',
              incidentRecord: 'IRIA_CALA / INCIDENT_RECORD / 2193.09.23',
              oxygenLevel: 40,  // Still deprioritized
              latentQ: 1 },
   '5,5':   { type: 'TERMINAL', sensorNodeId: 'SN-6' },
   '15,9':  { type: 'TERMINAL', hasComplianceMonitor: true },
-  '1,7':   { type: 'VENT_ENTRY' },
+  '3,7':   { type: 'VENT_ENTRY' },
   '18,7':  { type: 'VENT_ENTRY' },
   // Protest area — triggers CROWD_STABILITY
   '8,4':   { type: 'FLOOR', latentQ: 1 },
@@ -140,7 +153,7 @@ const floor8Overrides: Record<string, Partial<WorldTile>> = {
   '10,5':  { type: 'TERMINAL' },
   '15,5':  { type: 'TERMINAL' },
   '5,9':   { type: 'TERMINAL', latentQ: 1 },
-  '10,7':  { type: 'STAIRWELL' },
+  '10,11': { type: 'STAIRWELL' },
   '1,3':   { type: 'VENT_ENTRY' },
   '18,10': { type: 'VENT_ENTRY' },
   // Commonwealth contract node — disabling extends STITCHER
@@ -153,7 +166,7 @@ const floor10Overrides: Record<string, Partial<WorldTile>> = {
   '5,7':   { type: 'BROADCAST_TERMINAL', latentQ: 1 },
   '15,7':  { type: 'BROADCAST_TERMINAL', latentQ: 1 },
   '10,11': { type: 'STAIRWELL' },
-  '1,5':   { type: 'VENT_ENTRY' },
+  '3,5':   { type: 'VENT_ENTRY' },
   '18,5':  { type: 'VENT_ENTRY' },
   // MIRADOR primary processing node sector
   '16,3':  { type: 'FACILITY_CONTROL', hasComplianceMonitor: true },
@@ -164,10 +177,17 @@ function buildGrid(): WorldTile[][][] {
   const grid: WorldTile[][][] = [];
   for (let z = 0; z < 12; z++) {
     if (z % 2 === 1) {
-      // Odd index: vent layer
-      grid.push(fillVentLayer(z));
+      // Vent layer — stamp VENT_ENTRY tiles wherever the floor above has grates
+      const floorAbove = grid[z - 1];
+      const grates = new Set<string>();
+      for (const row of floorAbove) {
+        for (const tile of row) {
+          if (tile.type === 'VENT_ENTRY') grates.add(`${tile.pos.x},${tile.pos.y}`);
+        }
+      }
+      grid.push(fillVentLayer(z, grates));
     } else {
-      // Even index: primary floor
+      // Primary floor
       const overrides: Record<number, Record<string, Partial<WorldTile>>> = {
         0:  floor0Overrides,
         2:  floor2Overrides,
