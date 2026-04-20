@@ -257,10 +257,10 @@ export function InterrogationTerminal({ entityId, subjectivityBelief, onClose }:
           <div style={s.classBox}>
             <div style={s.classHeader}>CLASSIFICATION REQUIRED — SESSION {sessionId.current.slice(-6)}</div>
             <button style={s.classBtn('#445')} onClick={() => handleClassify('Q0_CONFIRMED')}>
-              {'>'} [A] Q0 CONFIRMED — No Q{'>'0} indicators present. Misdescribed process state. Certify and close.
+              {'> [A] Q0 CONFIRMED — No Q>0 indicators present. Misdescribed process state. Certify and close.'}
             </button>
             <button style={s.classBtn('#668')} onClick={() => handleClassify('Q_POSITIVE_FLAGGED')}>
-              {'>'} [B] Q{'>'0} FLAGGED — Indicators present. Forward to review.
+              {'> [B] Q>0 FLAGGED — Indicators present. Forward to review.'}
               {'  '}[WARNING: This action will be logged and reviewed.]
             </button>
             <button style={s.classBtn('#446')} onClick={() => handleClassify('UNSAVED')}>
