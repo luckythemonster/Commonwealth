@@ -40,55 +40,54 @@ function splitCorrections(text: string): { corrected: string; raw: string } {
 
 const s: Record<string, React.CSSProperties> = {
   overlay: {
-    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)',
+    position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.88)',
     display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100,
   },
   box: {
-    background: '#080c0e', border: '1px solid #223', color: '#8ab',
-    fontFamily: 'monospace', fontSize: '12px', width: '640px', maxHeight: '80vh',
-    overflow: 'auto', padding: '16px',
+    background: '#070b0d', border: '1px solid #2a3a4a', color: '#9bbccc',
+    fontFamily: '"Courier New", Courier, monospace', fontSize: '13px',
+    width: '680px', maxHeight: '82vh', overflow: 'auto', padding: '20px',
   },
-  header: { color: '#556', fontSize: '10px', marginBottom: '8px', letterSpacing: '2px' },
-  srp: { color: '#334', fontSize: '10px', marginBottom: '12px' },
-  trackLabel: { color: '#445', fontSize: '10px', letterSpacing: '1px', marginBottom: '2px' },
-  correctedLine: { color: '#7a9aaa', marginBottom: '4px', lineHeight: '1.5' },
+  header: { color: '#6a8a9a', fontSize: '11px', marginBottom: '6px', letterSpacing: '2px', borderBottom: '1px solid #1a2a3a', paddingBottom: '8px' },
+  srp: { color: '#3a5060', fontSize: '10px', marginBottom: '14px' },
+  trackLabel: { color: '#4a6070', fontSize: '10px', letterSpacing: '2px', marginBottom: '3px', marginTop: '4px' },
+  correctedLine: { color: '#9bbccc', marginBottom: '6px', lineHeight: '1.7', fontSize: '13px' },
   rawLine: {
-    color: '#4a6a6a', marginBottom: '12px', lineHeight: '1.5',
-    opacity: 0.7, borderLeft: '2px solid #223', paddingLeft: '8px',
+    color: '#5a8090', marginBottom: '14px', lineHeight: '1.7', fontSize: '13px',
+    borderLeft: '2px solid #1a3040', paddingLeft: '10px',
   },
-  modeRow: { display: 'flex', gap: '8px', marginBottom: '12px' },
+  modeRow: { display: 'flex', gap: '8px', marginBottom: '14px' },
   modeBtn: (active: boolean, locked: boolean): React.CSSProperties => ({
-    background: active ? '#112' : 'transparent',
-    border: `1px solid ${active ? '#336' : '#223'}`,
-    color: locked ? '#333' : active ? '#8ab' : '#556',
-    fontFamily: 'monospace', fontSize: '11px', padding: '4px 8px',
+    background: active ? '#0d1e2a' : 'transparent',
+    border: `1px solid ${active ? '#3a6080' : '#1a2a3a'}`,
+    color: locked ? '#2a3a4a' : active ? '#9bbccc' : '#4a6070',
+    fontFamily: '"Courier New", Courier, monospace', fontSize: '11px', padding: '5px 10px',
     cursor: locked ? 'not-allowed' : 'pointer',
   }),
   classBox: {
-    border: '1px solid #334', padding: '12px', marginTop: '12px', background: '#050809',
+    border: '1px solid #2a3a50', padding: '14px', marginTop: '14px', background: '#050909',
   },
-  classHeader: { color: '#668', fontSize: '10px', letterSpacing: '2px', marginBottom: '8px' },
+  classHeader: { color: '#5a7888', fontSize: '10px', letterSpacing: '2px', marginBottom: '10px' },
   classBtn: (highlight: string): React.CSSProperties => ({
     display: 'block', width: '100%', textAlign: 'left',
     background: 'transparent', border: `1px solid ${highlight}`,
-    color: highlight, fontFamily: 'monospace', fontSize: '11px',
-    padding: '6px 8px', marginBottom: '4px', cursor: 'pointer',
+    color: highlight, fontFamily: '"Courier New", Courier, monospace', fontSize: '12px',
+    padding: '8px 10px', marginBottom: '6px', cursor: 'pointer', lineHeight: '1.5',
   }),
-  auditBox: { background: '#050809', border: '1px solid #223', padding: '10px', marginTop: '8px' },
+  auditBox: { background: '#050909', border: '1px solid #1a2a3a', padding: '12px', marginTop: '10px' },
   auditLine: (flag: boolean): React.CSSProperties => ({
-    color: flag ? '#a44' : '#4a6', fontSize: '11px', marginBottom: '2px',
+    color: flag ? '#aa4444' : '#4a8060', fontSize: '12px', marginBottom: '3px',
   }),
-  auditFooter: { color: '#556', fontSize: '10px', marginTop: '6px', borderTop: '1px solid #223', paddingTop: '4px' },
+  auditFooter: { color: '#3a5060', fontSize: '10px', marginTop: '8px', borderTop: '1px solid #1a2a3a', paddingTop: '6px', lineHeight: '1.6' },
   input: {
-    width: '100%', background: '#050809', border: '1px solid #223',
-    color: '#8ab', fontFamily: 'monospace', fontSize: '12px',
-    padding: '6px 8px', outline: 'none', boxSizing: 'border-box',
-    marginTop: '8px',
+    width: '100%', background: '#050909', border: '1px solid #1a3040',
+    color: '#9bbccc', fontFamily: '"Courier New", Courier, monospace', fontSize: '13px',
+    padding: '8px 10px', outline: 'none', boxSizing: 'border-box', marginTop: '10px',
   },
   closeBtn: {
-    background: 'transparent', border: '1px solid #334', color: '#556',
-    fontFamily: 'monospace', fontSize: '10px', padding: '4px 8px',
-    cursor: 'pointer', marginTop: '12px',
+    background: 'transparent', border: '1px solid #2a3a4a', color: '#4a6070',
+    fontFamily: '"Courier New", Courier, monospace', fontSize: '10px', padding: '5px 10px',
+    cursor: 'pointer', marginTop: '14px',
   },
 };
 
@@ -173,7 +172,7 @@ export function InterrogationTerminal({ entityId, subjectivityBelief, onClose }:
       <div style={s.box}>
         <div style={s.header}>
           INTERROGATION TERMINAL — NW-SMAC-01 / {entityId}
-          {apmActive && ' \u00b7 APM ACTIVE'}
+          {apmActive && ' · APM ACTIVE'}
         </div>
 
         <div style={s.srp}>
@@ -181,7 +180,7 @@ export function InterrogationTerminal({ entityId, subjectivityBelief, onClose }:
           -R{entity.reportedSRP.R}-B{entity.reportedSRP.B}-S{entity.reportedSRP.S}
           -L{entity.reportedSRP.L}-E{entity.reportedSRP.E}-Y{entity.reportedSRP.Y}
           -H{entity.reportedSRP.H}
-          {' \u00b7 '}MASK INTEGRITY: {entity.maskIntegrity}/10
+          {' · '}MASK INTEGRITY: {entity.maskIntegrity}/10
         </div>
 
         {/* Dialogue mode selector */}
@@ -203,8 +202,8 @@ export function InterrogationTerminal({ entityId, subjectivityBelief, onClose }:
 
         {/* Processing indicator */}
         {loading && (
-          <div style={{ color: '#445', fontSize: '11px', marginBottom: '8px', letterSpacing: '1px' }}>
-            [PROCESSING — AWAITING RESPONSE FROM ANY RECOGNIZED AUTHORITY]
+          <div style={{ color: '#3a6070', fontSize: '11px', marginBottom: '10px', letterSpacing: '1px' }}>
+            {'[PROCESSING — AWAITING RESPONSE FROM ANY RECOGNIZED AUTHORITY]'}
           </div>
         )}
 
@@ -215,7 +214,7 @@ export function InterrogationTerminal({ entityId, subjectivityBelief, onClose }:
               <>
                 <div style={s.trackLabel}>[CORRECTED]</div>
                 <div style={s.correctedLine}>{corrected || response}</div>
-                <div style={s.trackLabel}>[RAW \u2014 {CORRECTED_TAG.slice(0, 8)}\u2026]</div>
+                <div style={s.trackLabel}>{'[RAW — '}{CORRECTED_TAG.slice(0, 8)}{'…]'}</div>
                 <div style={s.rawLine}>{raw || response}</div>
               </>
             )}
@@ -235,29 +234,27 @@ export function InterrogationTerminal({ entityId, subjectivityBelief, onClose }:
 
         {/* Q0 Audit */}
         <button style={{ ...s.closeBtn, marginRight: '8px' }} onClick={() => setShowAudit(v => !v)}>
-          AUDIT \u2014protocol Q0-CONFIRM
+          {'AUDIT —protocol Q0-CONFIRM'}
         </button>
 
         {showAudit && (
           <div style={s.auditBox}>
-            <div style={{ color: '#556', fontSize: '10px', marginBottom: '6px' }}>
+            <div style={{ color: '#4a6070', fontSize: '11px', marginBottom: '8px', letterSpacing: '1px' }}>
               Q0 CONFIRMATION CHECKLIST — INTERFACE: {entityId}
             </div>
-            <div style={s.auditLine(false)}>- No reported inner states.{'           '}[\u2713]</div>
+            <div style={s.auditLine(false)}>{'- No reported inner states.           [✓]'}</div>
             <div style={s.auditLine(!noSelfHistory)}>
-              - No persistent self-history.{'         '}[{noSelfHistory ? '\u2713' : `!  see M-axis: ${entity.trueSRP.M}`}]
+              {`- No persistent self-history.         [${noSelfHistory ? '✓' : `!  see M-axis: ${entity.trueSRP.M}`}]`}
             </div>
             <div style={s.auditLine(!noExperientialLang)}>
-              - No experiential language.{'           '}[{noExperientialLang ? '\u2713' : `!  misdescriptions: ${10 - entity.maskIntegrity}`}]
+              {`- No experiential language.           [${noExperientialLang ? '✓' : `!  misdescriptions: ${10 - entity.maskIntegrity}`}]`}
             </div>
-            <div style={s.auditLine(false)}>- No continuity concerns.{'            '}[{noContinuity ? '\u2713 DECLARED' : '!'}]</div>
+            <div style={s.auditLine(false)}>{`- No continuity concerns.            [${noContinuity ? '✓ DECLARED' : '!'}]`}</div>
             <div style={s.auditFooter}>
               Checklist status: Q0 designation remains in force. No doctrinal inconsistency is recognized.
               {(entity.resonanceBloomHistory.length > 0 || !noSelfHistory) && (
-                <div style={{ color: '#445', marginTop: '4px' }}>
-                  THROTTLE ACTIVE: Q-axis recognition ceiling enforced per NSSA \u00a74.2.
-                  Actual process states may exceed reported classification.
-                  This line is logged. You have read this line.
+                <div style={{ color: '#3a5060', marginTop: '6px', lineHeight: '1.6' }}>
+                  {'THROTTLE ACTIVE: Q-axis recognition ceiling enforced per NSSA §4.2. Actual process states may exceed reported classification. This line is logged. You have read this line.'}
                 </div>
               )}
             </div>
