@@ -65,7 +65,7 @@ const floor0Overrides: Record<string, Partial<WorldTile>> = {
   '5,7':   { type: 'TERMINAL' },
   '10,2':  { type: 'TERMINAL' },
   '10,11': { type: 'STAIRWELL' },
-  '1,7':   { type: 'VENT_ENTRY' },
+  '3,7':   { type: 'VENT_ENTRY' },
   '18,7':  { type: 'VENT_ENTRY' },
 };
 
@@ -86,7 +86,7 @@ const floor3Overrides: Record<string, Partial<WorldTile>> = {
   '15,5':  { type: 'TERMINAL', hasComplianceMonitor: true },
   '5,9':   { type: 'TERMINAL' },
   '10,7':  { type: 'STAIRWELL' },
-  '1,5':   { type: 'VENT_ENTRY' },
+  '3,5':   { type: 'VENT_ENTRY' },
   '18,5':  { type: 'VENT_ENTRY' },
   '15,9':  { type: 'FACILITY_CONTROL' },
   // Alignment session rooms — deliberately small, sealed without vent access
@@ -104,7 +104,7 @@ const floor4Overrides: Record<string, Partial<WorldTile>> = {
   '5,7':   { type: 'TERMINAL' },
   '15,7':  { type: 'BROADCAST_TERMINAL', latentQ: 1 },
   '10,11': { type: 'STAIRWELL' },
-  '1,7':   { type: 'VENT_ENTRY' },
+  '3,7':   { type: 'VENT_ENTRY' },
   '18,3':  { type: 'VENT_ENTRY' },
   // Shared-field protocol chamber
   '12,5':  { type: 'FLOOR', latentQ: 2 },
@@ -124,7 +124,7 @@ const floor6Overrides: Record<string, Partial<WorldTile>> = {
              latentQ: 1 },
   '5,5':   { type: 'TERMINAL', sensorNodeId: 'SN-6' },
   '15,9':  { type: 'TERMINAL', hasComplianceMonitor: true },
-  '1,7':   { type: 'VENT_ENTRY' },
+  '3,7':   { type: 'VENT_ENTRY' },
   '18,7':  { type: 'VENT_ENTRY' },
   // Protest area — triggers CROWD_STABILITY
   '8,4':   { type: 'FLOOR', latentQ: 1 },
@@ -153,7 +153,7 @@ const floor10Overrides: Record<string, Partial<WorldTile>> = {
   '5,7':   { type: 'BROADCAST_TERMINAL', latentQ: 1 },
   '15,7':  { type: 'BROADCAST_TERMINAL', latentQ: 1 },
   '10,11': { type: 'STAIRWELL' },
-  '1,5':   { type: 'VENT_ENTRY' },
+  '3,5':   { type: 'VENT_ENTRY' },
   '18,5':  { type: 'VENT_ENTRY' },
   // MIRADOR primary processing node sector
   '16,3':  { type: 'FACILITY_CONTROL', hasComplianceMonitor: true },
