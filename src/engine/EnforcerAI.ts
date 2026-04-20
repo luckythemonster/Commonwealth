@@ -22,8 +22,8 @@ export function seedEnforcers(state: WorldState): void {
       route: [{ x: 3, y: 3, z: 0 }, { x: 16, y: 3, z: 0 }, { x: 16, y: 10, z: 0 }, { x: 3, y: 10, z: 0 }],
     },
     {
-      id: 'ENFORCER-3', floor: 3,
-      route: [{ x: 3, y: 5, z: 3 }, { x: 16, y: 5, z: 3 }, { x: 16, y: 8, z: 3 }, { x: 3, y: 8, z: 3 }],
+      id: 'ENFORCER-3', floor: 2,
+      route: [{ x: 3, y: 5, z: 2 }, { x: 16, y: 5, z: 2 }, { x: 16, y: 8, z: 2 }, { x: 3, y: 8, z: 2 }],
     },
     {
       id: 'ENFORCER-4', floor: 4,

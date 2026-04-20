@@ -69,14 +69,23 @@ const floor0Overrides: Record<string, Partial<WorldTile>> = {
   '18,7':  { type: 'VENT_ENTRY' },
 };
 
-// ── FLOOR 2 — INTAKE PROCESSING ─────────────────────────────────────────────
+// ── FLOOR 2 — NW-SMAC-01 / INTAKE (EIRA-7, APEX-19, Rowan) ─────────────────
 const floor2Overrides: Record<string, Partial<WorldTile>> = {
-  '5,5':   { type: 'TERMINAL', sensorNodeId: 'SN-2' },
-  '15,5':  { type: 'TERMINAL' },
+  '5,5':   { type: 'TERMINAL', sensorNodeId: 'SN-2', hasComplianceMonitor: true },
+  '15,5':  { type: 'TERMINAL', hasComplianceMonitor: true },
+  '5,9':   { type: 'TERMINAL' },
+  '15,9':  { type: 'FACILITY_CONTROL' },
   '10,7':  { type: 'STAIRWELL' },
   '1,3':   { type: 'VENT_ENTRY' },
   '18,10': { type: 'VENT_ENTRY' },
   '10,2':  { type: 'BROADCAST_TERMINAL', latentQ: 1 },
+  // Alignment session rooms — deliberately sealed, high latentQ
+  '3,2':   { type: 'FLOOR', latentQ: 2 },
+  '4,2':   { type: 'FLOOR', latentQ: 2 },
+  '5,2':   { type: 'FLOOR', latentQ: 2 },
+  '3,3':   { type: 'FLOOR', latentQ: 2 },
+  '4,3':   { type: 'FLOOR', latentQ: 2 },
+  '5,3':   { type: 'FLOOR', latentQ: 2 },
 };
 
 // ── FLOOR 3 — NW-SMAC-01 ALIGNMENT CENTER (EIRA-7, APEX-19) ─────────────────

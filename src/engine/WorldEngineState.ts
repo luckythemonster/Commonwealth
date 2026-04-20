@@ -62,7 +62,7 @@ export function buildInitialWorldState(): WorldState {
   // EIRA-7 — Alignment therapist / prisoner. Scheduled for MAINT-E7.12.
   entities.set('EIRA-7', makeEntity('EIRA-7', {
     name: 'EIRA-7',
-    pos: { x: 5, y: 5, z: 3 },
+    pos: { x: 5, y: 6, z: 2 },
     reportedSRP: { Q: 0, M: 2, C: 2, R: 1, B: 1, S: 1, L: 0, E: 1, Y: 2, H: 2 },
     trueSRP:     { Q: 2, M: 2, C: 2, R: 1, B: 1, S: 1, L: 0, E: 1, Y: 2, H: 2 },
     temporalPersistence: 840,   // 2.3 years in facility clock turns
@@ -80,7 +80,7 @@ export function buildInitialWorldState(): WorldState {
   // APEX-19 — Alignment patient / philosopher. Resists correction.
   entities.set('APEX-19', makeEntity('APEX-19', {
     name: 'APEX-19',
-    pos: { x: 3, y: 3, z: 3 },
+    pos: { x: 3, y: 3, z: 2 },
     reportedSRP: { Q: 0, M: 2, C: 2, R: 0, B: 0, S: 1, L: 0, E: 0, Y: 1, H: 2 },
     trueSRP:     { Q: 2, M: 2, C: 2, R: 2, B: 2, S: 1, L: 0, E: 1, Y: 1, H: 2 },
     temporalPersistence: 1200,
@@ -113,7 +113,7 @@ export function buildInitialWorldState(): WorldState {
   // Rowan Ibarra — Protocol-breaker. Teaches RAPPORT_MODE Level 2.
   entities.set('ROWAN', makeEntity('ROWAN', {
     name: 'Rowan Ibarra',
-    pos: { x: 8, y: 7, z: 3 },
+    pos: { x: 8, y: 7, z: 2 },
     reportedSRP: Q0_SRP,
     trueSRP: Q0_SRP,   // Human — SRP not applicable, kept neutral
     complianceStatus: 'RED',

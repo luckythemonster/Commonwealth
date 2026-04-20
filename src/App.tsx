@@ -19,8 +19,8 @@ const sideBtn: React.CSSProperties = {
 };
 
 const FLOOR_LABELS: Record<number, string> = {
-  0: '[ADMIN/MIRADOR]', 2: '[INTAKE]', 4: '[RING C]',
-  6: '[RESIDENTIAL]',   8: '[ARCHIVE]', 10: '[OPERATIONS]',
+  0: '[ADMIN/MIRADOR]', 2: '[NW-SMAC-01]', 4: '[RING C]',
+  6: '[RESIDENTIAL]',   8: '[ARCHIVE]',    10: '[OPERATIONS]',
 };
 
 export default function App() {
