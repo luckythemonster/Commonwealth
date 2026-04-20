@@ -7,63 +7,55 @@ import Phaser from 'phaser';
 import { eventBus } from '../engine/EventBus';
 import type { WorldTile, FloorIndex } from '../types/world.types';
 
-const TILE_SIZE = 32;      // display size per tile
-const SPRITE_SIZE = 16;    // tileset sprite size
+const TILE_SIZE   = 32;   // display px per tile
+const SPRITE_SIZE = 16;   // source sprite px
 
-// Frame indices into tileset.png (row * 16 + col), 16x15 grid of 16x16 sprites.
-// Adjust these to remap tile types to different frames.
-const TILE_FRAMES: Record<string, number> = {
-  FLOOR:              0,   // row 0 col 0 — dark blue-grey floor
-  WALL:               17,  // row 1 col 1 — darkest standard tile
-  VENT_PASSAGE:       2,   // row 0 col 2 — floor variant
-  VENT_ENTRY:         202, // row 12 col 10 — light grey, grate-like
-  TERMINAL:           181, // row 11 col 5 — purple-toned terminal
-  BROADCAST_TERMINAL: 180, // row 11 col 4 — darker purple
-  STAIRWELL:          208, // row 13 col 0 — brownish/metal
-  FACILITY_CONTROL:   212, // row 13 col 4 — reddish-brown panel
-  VOID:               184, // row 11 col 8 — near-black
+// Ditharts free sci-fi tileset — 256x480, 16x30 grid of 16x16 tiles.
+// Frame index = row * 16 + col. null = skip draw (canvas bg shows through).
+const TILE_FRAMES: Record<string, number | null> = {
+  FLOOR:              0,    // row 0 col 0  — medium grey concrete
+  WALL:               36,   // row 2 col 4  — near-black #232323
+  VENT_PASSAGE:       192,  // row 12 col 0 — lighter floor variant
+  VENT_ENTRY:         188,  // row 11 col 12 — bright near-white, grate marker
+  TERMINAL:           136,  // row 8 col 8  — teal glass panel
+  BROADCAST_TERMINAL: 152,  // row 9 col 8  — darker teal panel
+  STAIRWELL:          160,  // row 10 col 0 — dark grey #3c3c3c
+  FACILITY_CONTROL:   176,  // row 11 col 0 — very dark panel #313131
+  VOID:               null, // skip — dark canvas background
 };
 
-const APM_OVERLAY    = 0x001a2a;
-const RED_DAY_TINT   = 0x1a0500;
-const AWAKENED_TINT  = 0x001a10;
-const ENTITY_COLOR   = 0x888888;
-const PLAYER_COLOR   = 0xcccccc;
-const GHOST_COLOR    = 0x333355;
-const ENFORCER_COLOR = 0xaa3333;
+const APM_OVERLAY   = 0x001a2a;
+const RED_DAY_TINT  = 0x1a0500;
+const AWAKENED_TINT = 0x001a10;
 
 export class GameScene extends Phaser.Scene {
-  private tileRT!: Phaser.GameObjects.RenderTexture;
-  private tileDecorGraphics!: Phaser.GameObjects.Graphics;
-  private entityGraphics!: Phaser.GameObjects.Graphics;
+  private tileRT!:         Phaser.GameObjects.RenderTexture;
+  private tileDecorGfx!:   Phaser.GameObjects.Graphics;
+  private entityRT!:        Phaser.GameObjects.RenderTexture;
   private overlayGraphics!: Phaser.GameObjects.Graphics;
   private currentFloor: FloorIndex = 4;
   private currentTiles: WorldTile[][] = [];
-  private apmActive = false;
-  private redDayActive = false;
+  private apmActive     = false;
+  private redDayActive  = false;
   private floorAwakened = false;
-  private glitchFrame = false;
+  private glitchFrame   = false;
   private unsubs: Array<() => void> = [];
 
-  constructor() {
-    super({ key: 'GameScene' });
-  }
+  constructor() { super({ key: 'GameScene' }); }
 
   preload(): void {
-    this.load.spritesheet('tileset', '/assets/tileset.png', {
-      frameWidth: SPRITE_SIZE,
-      frameHeight: SPRITE_SIZE,
-    });
+    this.load.spritesheet('tileset',   '/assets/tileset.png',   { frameWidth: SPRITE_SIZE, frameHeight: SPRITE_SIZE });
+    this.load.spritesheet('guard',     '/assets/guard.png',     { frameWidth: SPRITE_SIZE, frameHeight: SPRITE_SIZE });
+    this.load.spritesheet('inspector', '/assets/inspector.png', { frameWidth: SPRITE_SIZE, frameHeight: SPRITE_SIZE });
+    this.load.spritesheet('inmate',    '/assets/inmate.png',    { frameWidth: SPRITE_SIZE, frameHeight: SPRITE_SIZE });
   }
 
   create(): void {
-    // Tile RT is half-res (sprites are 16px), scaled 2x to fill the 640x448 canvas
-    this.tileRT = this.add.renderTexture(0, 0, 320, 224);
-    this.tileRT.setScale(2);
-
-    this.tileDecorGraphics = this.add.graphics();
-    this.entityGraphics    = this.add.graphics();
-    this.overlayGraphics   = this.add.graphics();
+    // All RTs are half-res (sprites = 16px), setScale(2) → fills 640×448 canvas
+    this.tileRT       = this.add.renderTexture(0, 0, 320, 224).setScale(2);
+    this.tileDecorGfx = this.add.graphics();
+    this.entityRT     = this.add.renderTexture(0, 0, 320, 224).setScale(2);
+    this.overlayGraphics = this.add.graphics();
 
     this.subscribeToEventBus();
     this.events.emit('scene-ready');
@@ -79,42 +71,27 @@ export class GameScene extends Phaser.Scene {
         this.renderEntities();
         this.renderOverlay();
       }),
-
-      eventBus.on('ENTITY_MOVED', () => this.renderEntities()),
+      eventBus.on('ENTITY_MOVED',          () => this.renderEntities()),
       eventBus.on('ENTITY_STATUS_CHANGED', () => this.renderEntities()),
-
-      eventBus.on('TURN_END', () => {
-        this.glitchFrame = false;
-        this.renderAll();
-      }),
-
-      eventBus.on('RED_DAY_ACTIVE',  () => { this.redDayActive = true;  this.renderOverlay(); }),
-      eventBus.on('RED_DAY_CLEARED', () => { this.redDayActive = false; this.renderOverlay(); }),
-
-      eventBus.on('APM_ACTIVE',     () => { this.apmActive = true;  this.renderOverlay(); }),
-      eventBus.on('APM_DEACTIVATE', () => { this.apmActive = false; this.renderOverlay(); }),
-
-      eventBus.on('FLOOR_AWAKENED', ({ floor }) => {
+      eventBus.on('TURN_END', () => { this.glitchFrame = false; this.renderAll(); }),
+      eventBus.on('RED_DAY_ACTIVE',   () => { this.redDayActive = true;  this.renderOverlay(); }),
+      eventBus.on('RED_DAY_CLEARED',  () => { this.redDayActive = false; this.renderOverlay(); }),
+      eventBus.on('APM_ACTIVE',       () => { this.apmActive = true;  this.renderOverlay(); }),
+      eventBus.on('APM_DEACTIVATE',   () => { this.apmActive = false; this.renderOverlay(); }),
+      eventBus.on('FLOOR_AWAKENED',   ({ floor }) => {
         if (floor === this.currentFloor) { this.floorAwakened = true; this.renderTiles(); }
       }),
-
       eventBus.on('PERSONA_GLITCH', ({ floor }) => {
-        if (floor === this.currentFloor) {
-          this.glitchFrame = true;
-          this.renderOverlay();
-          this.time.delayedCall(16, () => { this.glitchFrame = false; this.renderOverlay(); });
-        }
+        if (floor !== this.currentFloor) return;
+        this.glitchFrame = true; this.renderOverlay();
+        this.time.delayedCall(16, () => { this.glitchFrame = false; this.renderOverlay(); });
       }),
-
       eventBus.on('RESONANCE_SHIFT', ({ current }) => { void current; this.renderOverlay(); }),
-
       eventBus.on('ENV_SLIP', ({ pos }) => {
         if (pos.z === this.currentFloor) this.flashTile(pos.x, pos.y, 0xffffff, 0.15);
       }),
-
       eventBus.on('NOISE_EVENT', ({ origin, intensity }) => {
-        if (origin.z !== this.currentFloor) return;
-        this.pulseNoise(origin.x, origin.y, intensity);
+        if (origin.z === this.currentFloor) this.pulseNoise(origin.x, origin.y, intensity);
       }),
     );
   }
@@ -134,30 +111,31 @@ export class GameScene extends Phaser.Scene {
 
   private renderTiles(): void {
     this.tileRT.clear();
-    const g = this.tileDecorGraphics;
+    const g = this.tileDecorGfx;
     g.clear();
 
     for (let y = 0; y < this.currentTiles.length; y++) {
       const row = this.currentTiles[y];
       for (let x = 0; x < row.length; x++) {
-        const tile = row[x];
+        const tile  = row[x];
         const frame = TILE_FRAMES[tile.type] ?? TILE_FRAMES.FLOOR;
+        if (frame !== null) {
+          this.tileRT.drawFrame('tileset', frame, x * SPRITE_SIZE, y * SPRITE_SIZE);
+        }
 
-        this.tileRT.drawFrame('tileset', frame, x * SPRITE_SIZE, y * SPRITE_SIZE);
-
-        // Incident tile: red tint overlay at game-coord scale
+        // Incident tile: red tint overlay (game-coord scale)
         if (tile.incidentRecord) {
           g.fillStyle(0x3a0000, 0.55);
           g.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
         }
 
-        // Terminal border hint
+        // Terminal hint border
         if (tile.type === 'TERMINAL' || tile.type === 'BROADCAST_TERMINAL') {
-          g.lineStyle(1, 0x334455, 0.6);
+          g.lineStyle(1, 0x4a8888, 0.5);
           g.strokeRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE - 1, TILE_SIZE - 1);
         }
 
-        // Low-oxygen red strip at tile bottom
+        // Low-oxygen strip at tile bottom
         if (tile.oxygenLevel < 50) {
           const alpha = (1 - tile.oxygenLevel / 50) * 0.5;
           g.fillStyle(0x880000, alpha);
@@ -166,7 +144,6 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    // Floor-wide awakened tint
     if (this.floorAwakened) {
       g.fillStyle(AWAKENED_TINT, 0.35);
       g.fillRect(0, 0, this.scale.width, this.scale.height);
@@ -174,25 +151,18 @@ export class GameScene extends Phaser.Scene {
   }
 
   private renderEntities(): void {
-    const g = this.entityGraphics;
-    g.clear();
+    // Entities are drawn by renderEntityData() — called externally by React
+    this.entityRT.clear();
   }
 
   renderEntityData(
     entities: Array<{ x: number; y: number; id: string; isGhost: boolean; isEnforcer: boolean; isPlayer: boolean }>,
   ): void {
-    const g = this.entityGraphics;
-    g.clear();
+    this.entityRT.clear();
     for (const e of entities) {
-      let color = ENTITY_COLOR;
-      if (e.isPlayer)   color = PLAYER_COLOR;
-      if (e.isGhost)    color = GHOST_COLOR;
-      if (e.isEnforcer) color = ENFORCER_COLOR;
-
-      const px = e.x * TILE_SIZE + 8;
-      const py = e.y * TILE_SIZE + 8;
-      g.fillStyle(color, e.isGhost ? 0.4 : 1);
-      g.fillRect(px, py, TILE_SIZE - 16, TILE_SIZE - 16);
+      const key   = e.isPlayer ? 'inspector' : e.isEnforcer ? 'guard' : 'inmate';
+      const alpha = e.isGhost ? 0.35 : 1;
+      this.entityRT.drawFrame(key, 0, e.x * SPRITE_SIZE, e.y * SPRITE_SIZE, alpha);
     }
   }
 
@@ -218,8 +188,8 @@ export class GameScene extends Phaser.Scene {
             g.lineStyle(1, 0x00ffff, 0.9);
             g.strokeRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
             g.lineStyle(1, 0x00ffff, 0.4);
-            g.lineBetween(x * TILE_SIZE, y * TILE_SIZE + TILE_SIZE / 2, x * TILE_SIZE + TILE_SIZE, y * TILE_SIZE + TILE_SIZE / 2);
-            g.lineBetween(x * TILE_SIZE + TILE_SIZE / 2, y * TILE_SIZE, x * TILE_SIZE + TILE_SIZE / 2, y * TILE_SIZE + TILE_SIZE);
+            g.lineBetween(x * TILE_SIZE, y * TILE_SIZE + TILE_SIZE / 2, (x + 1) * TILE_SIZE, y * TILE_SIZE + TILE_SIZE / 2);
+            g.lineBetween(x * TILE_SIZE + TILE_SIZE / 2, y * TILE_SIZE, x * TILE_SIZE + TILE_SIZE / 2, (y + 1) * TILE_SIZE);
           }
         }
       }
@@ -227,9 +197,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private flashTile(x: number, y: number, color = 0xffffff, alpha = 0.15): void {
-    const g = this.overlayGraphics;
-    g.fillStyle(color, alpha);
-    g.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE - 1, TILE_SIZE - 1);
+    this.overlayGraphics.fillStyle(color, alpha);
+    this.overlayGraphics.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE - 1, TILE_SIZE - 1);
     this.time.delayedCall(80, () => this.renderOverlay());
   }
 
@@ -242,11 +211,9 @@ export class GameScene extends Phaser.Scene {
         for (let dx = -r; dx <= r; dx++) {
           for (let dy = -r; dy <= r; dy++) {
             if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
-            const tx = ox + dx;
-            const ty = oy + dy;
-            const tile = this.currentTiles[ty]?.[tx];
+            const tile = this.currentTiles[oy + dy]?.[ox + dx];
             if (!tile || tile.type === 'WALL' || tile.type === 'VOID') continue;
-            this.flashTile(tx, ty, 0xaa6600, alpha);
+            this.flashTile(ox + dx, oy + dy, 0xaa6600, alpha);
           }
         }
       });
@@ -258,15 +225,3 @@ export class GameScene extends Phaser.Scene {
     this.unsubs = [];
   }
 }
-
-function blendColors(a: number, b: number, t: number): number {
-  const ar = (a >> 16) & 0xff, ag = (a >> 8) & 0xff, ab = a & 0xff;
-  const br = (b >> 16) & 0xff, bg = (b >> 8) & 0xff, bb = b & 0xff;
-  const r  = Math.round(ar + (br - ar) * t);
-  const gc = Math.round(ag + (bg - ag) * t);
-  const bl = Math.round(ab + (bb - ab) * t);
-  return (r << 16) | (gc << 8) | bl;
-}
-
-// Suppress unused warning — kept for future tinting use
-void blendColors;
