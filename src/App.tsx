@@ -5,6 +5,7 @@ import { eventBus } from './engine/EventBus';
 import { GameScene } from './phaser/GameScene';
 import { InterrogationTerminal } from './components/InterrogationTerminal';
 import { VentilationReport } from './components/VentilationReport';
+import { useInput } from './hooks/useInput';
 import type { SubjectivityBelief, FloorIndex, WorldState } from './types/world.types';
 
 const CANVAS_W = 640;
@@ -93,6 +94,12 @@ export default function App() {
   }
 
   const resonanceColor = resonance > 75 ? '#a44' : resonance > 50 ? '#a84' : '#4a6';
+
+  useInput({
+    onRefresh: refreshFloor,
+    onOpenTerminal: setTerminal,
+    onEndTurn: handleEndTurn,
+  });
 
   return (
     <div style={{ background: '#030507', minHeight: '100vh' }}>
