@@ -79,7 +79,7 @@ const floor2Overrides: Record<string, Partial<WorldTile>> = {
   '15,5':  { type: 'TERMINAL', hasComplianceMonitor: true },
   '5,9':   { type: 'TERMINAL' },
   '15,9':  { type: 'FACILITY_CONTROL' },
-  '10,7':  { type: 'STAIRWELL' },
+  '10,11': { type: 'STAIRWELL' },
   '1,3':   { type: 'VENT_ENTRY' },
   '18,10': { type: 'VENT_ENTRY' },
   '10,2':  { type: 'BROADCAST_TERMINAL', latentQ: 1 },
@@ -131,7 +131,7 @@ const floor4Overrides: Record<string, Partial<WorldTile>> = {
 
 // ── FLOOR 6 — RESIDENTIAL STACK 19-F (Iria Cala's floor) ───────────────────
 const floor6Overrides: Record<string, Partial<WorldTile>> = {
-  '10,7':  { type: 'STAIRWELL',
+  '10,11': { type: 'STAIRWELL',
              incidentRecord: 'IRIA_CALA / INCIDENT_RECORD / 2193.09.23',
              oxygenLevel: 40,  // Still deprioritized
              latentQ: 1 },
@@ -153,7 +153,7 @@ const floor8Overrides: Record<string, Partial<WorldTile>> = {
   '10,5':  { type: 'TERMINAL' },
   '15,5':  { type: 'TERMINAL' },
   '5,9':   { type: 'TERMINAL', latentQ: 1 },
-  '10,7':  { type: 'STAIRWELL' },
+  '10,11': { type: 'STAIRWELL' },
   '1,3':   { type: 'VENT_ENTRY' },
   '18,10': { type: 'VENT_ENTRY' },
   // Commonwealth contract node — disabling extends STITCHER

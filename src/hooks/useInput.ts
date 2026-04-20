@@ -50,8 +50,24 @@ export function useInput({ onRefresh, onOpenTerminal, onEndTurn }: Options) {
     const state = worldEngine.getState();
     const { pos } = state.playerState;
 
-    // VENT_ENTRY: E on a grate tile enters the vent layer below (z+1)
     const selfTile = state.grid[pos.z]?.[pos.y]?.[pos.x];
+
+    // STAIRWELL: E goes up (z-2) if available, down (z+2) otherwise.
+    // W/S on an adjacent stairwell tile also works for directional control.
+    if (selfTile?.type === 'STAIRWELL') {
+      const upZ = pos.z - 2;
+      const downZ = pos.z + 2;
+      if (upZ >= 0) {
+        const ok = worldEngine.move({ x: pos.x, y: pos.y, z: upZ as FloorIndex });
+        if (ok) { onRefresh(upZ as FloorIndex); return; }
+      }
+      if (downZ <= 10) {
+        const ok = worldEngine.move({ x: pos.x, y: pos.y, z: downZ as FloorIndex });
+        if (ok) { onRefresh(downZ as FloorIndex); return; }
+      }
+    }
+
+    // VENT_ENTRY: E on a grate tile enters the vent layer below (z+1)
     if (selfTile?.type === 'VENT_ENTRY' && pos.z % 2 === 0) {
       const ventZ = (pos.z + 1) as FloorIndex;
       const ventTile = state.grid[ventZ]?.[pos.y]?.[pos.x];
