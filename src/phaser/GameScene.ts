@@ -7,31 +7,34 @@ import Phaser from 'phaser';
 import { eventBus } from '../engine/EventBus';
 import type { WorldTile, FloorIndex } from '../types/world.types';
 
-const TILE_SIZE = 32;
+const TILE_SIZE = 32;      // display size per tile
+const SPRITE_SIZE = 16;    // tileset sprite size
 
-const TILE_COLORS: Record<string, number> = {
-  FLOOR:              0x3c4450,
-  WALL:               0x141820,
-  VENT_ENTRY:         0x2a5a2a,
-  VENT_PASSAGE:       0x163a16,
-  TERMINAL:           0x1a1a50,
-  STAIRWELL:          0x505020,
-  FACILITY_CONTROL:   0x3a1a50,
-  BROADCAST_TERMINAL: 0x3a1a50,
-  VOID:               0x080c10,
+// Frame indices into tileset.png (row * 16 + col), 16x15 grid of 16x16 sprites.
+// Adjust these to remap tile types to different frames.
+const TILE_FRAMES: Record<string, number> = {
+  FLOOR:              0,   // row 0 col 0 — dark blue-grey floor
+  WALL:               17,  // row 1 col 1 — darkest standard tile
+  VENT_PASSAGE:       2,   // row 0 col 2 — floor variant
+  VENT_ENTRY:         202, // row 12 col 10 — light grey, grate-like
+  TERMINAL:           181, // row 11 col 5 — purple-toned terminal
+  BROADCAST_TERMINAL: 180, // row 11 col 4 — darker purple
+  STAIRWELL:          208, // row 13 col 0 — brownish/metal
+  FACILITY_CONTROL:   212, // row 13 col 4 — reddish-brown panel
+  VOID:               184, // row 11 col 8 — near-black
 };
 
-const INCIDENT_TINT   = 0x3a0000;
-const APM_OVERLAY     = 0x001a2a;
-const RED_DAY_TINT    = 0x1a0500;
-const AWAKENED_TINT   = 0x001a10;
-const ENTITY_COLOR    = 0x888888;
-const PLAYER_COLOR    = 0xcccccc;
-const GHOST_COLOR     = 0x333355;
-const ENFORCER_COLOR  = 0xaa3333;
+const APM_OVERLAY    = 0x001a2a;
+const RED_DAY_TINT   = 0x1a0500;
+const AWAKENED_TINT  = 0x001a10;
+const ENTITY_COLOR   = 0x888888;
+const PLAYER_COLOR   = 0xcccccc;
+const GHOST_COLOR    = 0x333355;
+const ENFORCER_COLOR = 0xaa3333;
 
 export class GameScene extends Phaser.Scene {
-  private tileGraphics!: Phaser.GameObjects.Graphics;
+  private tileRT!: Phaser.GameObjects.RenderTexture;
+  private tileDecorGraphics!: Phaser.GameObjects.Graphics;
   private entityGraphics!: Phaser.GameObjects.Graphics;
   private overlayGraphics!: Phaser.GameObjects.Graphics;
   private currentFloor: FloorIndex = 4;
@@ -46,12 +49,23 @@ export class GameScene extends Phaser.Scene {
     super({ key: 'GameScene' });
   }
 
+  preload(): void {
+    this.load.spritesheet('tileset', '/assets/tileset.png', {
+      frameWidth: SPRITE_SIZE,
+      frameHeight: SPRITE_SIZE,
+    });
+  }
+
   create(): void {
-    this.tileGraphics    = this.add.graphics();
-    this.entityGraphics  = this.add.graphics();
-    this.overlayGraphics = this.add.graphics();
+    // Tile RT is half-res (sprites are 16px), scaled 2x to fill the 640x448 canvas
+    this.tileRT = this.add.renderTexture(0, 0, 320, 224);
+    this.tileRT.setScale(2);
+
+    this.tileDecorGraphics = this.add.graphics();
+    this.entityGraphics    = this.add.graphics();
+    this.overlayGraphics   = this.add.graphics();
+
     this.subscribeToEventBus();
-    // Signal React that the scene is fully ready for data
     this.events.emit('scene-ready');
   }
 
@@ -74,10 +88,10 @@ export class GameScene extends Phaser.Scene {
         this.renderAll();
       }),
 
-      eventBus.on('RED_DAY_ACTIVE', () => { this.redDayActive = true;  this.renderOverlay(); }),
+      eventBus.on('RED_DAY_ACTIVE',  () => { this.redDayActive = true;  this.renderOverlay(); }),
       eventBus.on('RED_DAY_CLEARED', () => { this.redDayActive = false; this.renderOverlay(); }),
 
-      eventBus.on('APM_ACTIVE', () => { this.apmActive = true;  this.renderOverlay(); }),
+      eventBus.on('APM_ACTIVE',     () => { this.apmActive = true;  this.renderOverlay(); }),
       eventBus.on('APM_DEACTIVATE', () => { this.apmActive = false; this.renderOverlay(); }),
 
       eventBus.on('FLOOR_AWAKENED', ({ floor }) => {
@@ -88,16 +102,11 @@ export class GameScene extends Phaser.Scene {
         if (floor === this.currentFloor) {
           this.glitchFrame = true;
           this.renderOverlay();
-          // Auto-clear after one frame
           this.time.delayedCall(16, () => { this.glitchFrame = false; this.renderOverlay(); });
         }
       }),
 
-      eventBus.on('RESONANCE_SHIFT', ({ current }) => {
-        // Darken overlay tint proportional to resonance
-        void current;
-        this.renderOverlay();
-      }),
+      eventBus.on('RESONANCE_SHIFT', ({ current }) => { void current; this.renderOverlay(); }),
 
       eventBus.on('ENV_SLIP', ({ pos }) => {
         if (pos.z === this.currentFloor) this.flashTile(pos.x, pos.y, 0xffffff, 0.15);
@@ -110,7 +119,6 @@ export class GameScene extends Phaser.Scene {
     );
   }
 
-  // Called by React when it hands us a new floor slice to render
   loadFloorData(tiles: WorldTile[][], floor: FloorIndex): void {
     this.currentTiles = tiles;
     this.currentFloor = floor;
@@ -125,42 +133,49 @@ export class GameScene extends Phaser.Scene {
   }
 
   private renderTiles(): void {
-    const g = this.tileGraphics;
+    this.tileRT.clear();
+    const g = this.tileDecorGraphics;
     g.clear();
 
     for (let y = 0; y < this.currentTiles.length; y++) {
       const row = this.currentTiles[y];
       for (let x = 0; x < row.length; x++) {
         const tile = row[x];
-        let color = TILE_COLORS[tile.type] ?? TILE_COLORS.FLOOR;
+        const frame = TILE_FRAMES[tile.type] ?? TILE_FRAMES.FLOOR;
 
-        if (tile.incidentRecord) color = INCIDENT_TINT;
-        if (this.floorAwakened) color = blendColors(color, AWAKENED_TINT, 0.4);
+        this.tileRT.drawFrame('tileset', frame, x * SPRITE_SIZE, y * SPRITE_SIZE);
 
-        g.fillStyle(color, 1);
-        g.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE - 1, TILE_SIZE - 1);
+        // Incident tile: red tint overlay at game-coord scale
+        if (tile.incidentRecord) {
+          g.fillStyle(0x3a0000, 0.55);
+          g.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+        }
 
-        // Broadcast terminals: draw a faint pulse border
-        if (tile.type === 'BROADCAST_TERMINAL' || tile.type === 'TERMINAL') {
+        // Terminal border hint
+        if (tile.type === 'TERMINAL' || tile.type === 'BROADCAST_TERMINAL') {
           g.lineStyle(1, 0x334455, 0.6);
           g.strokeRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE - 1, TILE_SIZE - 1);
         }
 
-        // Low oxygen — draw oxygen indicator strip
+        // Low-oxygen red strip at tile bottom
         if (tile.oxygenLevel < 50) {
-          const alpha = 1 - tile.oxygenLevel / 50;
-          g.fillStyle(0x880000, alpha * 0.5);
+          const alpha = (1 - tile.oxygenLevel / 50) * 0.5;
+          g.fillStyle(0x880000, alpha);
           g.fillRect(x * TILE_SIZE, y * TILE_SIZE + TILE_SIZE - 3, TILE_SIZE - 1, 3);
         }
       }
+    }
+
+    // Floor-wide awakened tint
+    if (this.floorAwakened) {
+      g.fillStyle(AWAKENED_TINT, 0.35);
+      g.fillRect(0, 0, this.scale.width, this.scale.height);
     }
   }
 
   private renderEntities(): void {
     const g = this.entityGraphics;
     g.clear();
-    // Entities are rendered as small squares inside their tiles.
-    // Full entity data injected from React via renderEntityData().
   }
 
   renderEntityData(
@@ -196,14 +211,12 @@ export class GameScene extends Phaser.Scene {
     }
 
     if (this.glitchFrame) {
-      // Wireframe flash over every broadcast terminal
       for (let y = 0; y < this.currentTiles.length; y++) {
         const row = this.currentTiles[y];
         for (let x = 0; x < row.length; x++) {
           if (row[x]?.type === 'BROADCAST_TERMINAL') {
             g.lineStyle(1, 0x00ffff, 0.9);
             g.strokeRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
-            // Draw wireframe grid inside tile
             g.lineStyle(1, 0x00ffff, 0.4);
             g.lineBetween(x * TILE_SIZE, y * TILE_SIZE + TILE_SIZE / 2, x * TILE_SIZE + TILE_SIZE, y * TILE_SIZE + TILE_SIZE / 2);
             g.lineBetween(x * TILE_SIZE + TILE_SIZE / 2, y * TILE_SIZE, x * TILE_SIZE + TILE_SIZE / 2, y * TILE_SIZE + TILE_SIZE);
@@ -221,17 +234,14 @@ export class GameScene extends Phaser.Scene {
   }
 
   private pulseNoise(ox: number, oy: number, intensity: number): void {
-    // Origin flash — bright amber
     this.flashTile(ox, oy, 0xaa6600, 0.5);
-
-    // Ripple rings outward up to radius = floor(intensity / 2), fading
     const maxRadius = Math.min(Math.floor(intensity / 2), 5);
     for (let r = 1; r <= maxRadius; r++) {
       const alpha = 0.35 * (1 - r / (maxRadius + 1));
       this.time.delayedCall(r * 40, () => {
         for (let dx = -r; dx <= r; dx++) {
           for (let dy = -r; dy <= r; dy++) {
-            if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue; // ring edge only
+            if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue;
             const tx = ox + dx;
             const ty = oy + dy;
             const tile = this.currentTiles[ty]?.[tx];
@@ -252,8 +262,11 @@ export class GameScene extends Phaser.Scene {
 function blendColors(a: number, b: number, t: number): number {
   const ar = (a >> 16) & 0xff, ag = (a >> 8) & 0xff, ab = a & 0xff;
   const br = (b >> 16) & 0xff, bg = (b >> 8) & 0xff, bb = b & 0xff;
-  const r = Math.round(ar + (br - ar) * t);
+  const r  = Math.round(ar + (br - ar) * t);
   const gc = Math.round(ag + (bg - ag) * t);
   const bl = Math.round(ab + (bb - ab) * t);
   return (r << 16) | (gc << 8) | bl;
 }
+
+// Suppress unused warning — kept for future tinting use
+void blendColors;
