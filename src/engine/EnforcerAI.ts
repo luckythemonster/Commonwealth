@@ -4,18 +4,23 @@
 // They are not clever. They are consistent. That's enough.
 
 import { eventBus } from './EventBus';
+import { calculateFOV } from './fov';
 import type { Entity, WorldState, Vec3, FloorIndex } from '../types/world.types';
+
+const ENFORCER_SIGHT_RADIUS = 5;
 
 interface PatrolRoute {
   waypoints: Vec3[];
   currentIndex: number;
 }
 
-const routes = new Map<string, PatrolRoute>();
-const alertTargets = new Map<string, Vec3>(); // enforcerId → noise origin
+const routes       = new Map<string, PatrolRoute>();
+const alertTargets = new Map<string, Vec3>();   // enforcerId → noise origin
+const chaseTargets = new Map<string, Vec3>();   // enforcerId → last known player pos
+const lostTimers   = new Map<string, number>(); // enforcerId → turns since lost sight
+const _enforcerPositions = new Map<string, Vec3>();
 
 export function seedEnforcers(state: WorldState): void {
-  // One Enforcer per primary floor (even indices only)
   const floorConfigs: { id: string; floor: FloorIndex; route: Vec3[] }[] = [
     {
       id: 'ENFORCER-0', floor: 0,
@@ -77,67 +82,110 @@ export function seedEnforcers(state: WorldState): void {
   }
 }
 
-// Subscribe to noise events — Enforcers on the same or adjacent floor get alerted
 export function initEnforcerListeners(): void {
   eventBus.on('ENFORCER_ALERTED', ({ enforcerId, origin }) => {
-    alertTargets.set(enforcerId, origin);
+    alertTargets.set(enforcerId as string, origin as Vec3);
   });
 
   eventBus.on('NOISE_EVENT', ({ origin, intensity }) => {
-    // Alert Enforcers on floors within intensity range
     for (const [id] of routes) {
-      const entity = getEnforcerPos(id);
-      if (!entity) continue;
-      const vertDist = Math.abs(entity.z - origin.z);
-      const effectiveIntensity = intensity * Math.pow(0.5, vertDist);
+      const pos = _enforcerPositions.get(id);
+      if (!pos) continue;
+      const vertDist = Math.abs(pos.z - (origin as Vec3).z);
+      const effectiveIntensity = (intensity as number) * Math.pow(0.5, vertDist);
       if (effectiveIntensity > 1.5) {
-        alertTargets.set(id, origin);
+        alertTargets.set(id, origin as Vec3);
         eventBus.emit('ENFORCER_ALERTED', { enforcerId: id, origin });
       }
     }
   });
 }
 
-const _enforcerPositions = new Map<string, Vec3>();
-
-function getEnforcerPos(id: string): Vec3 | undefined {
-  return _enforcerPositions.get(id);
-}
-
-// Called by WorldEngine.resolveEntity for each Enforcer each turn
 export function tickEnforcer(entity: Entity, state: WorldState): void {
   _enforcerPositions.set(entity.id, { ...entity.pos });
 
-  const alertTarget = alertTargets.get(entity.id);
+  const playerVisible = checkPlayerLOS(entity, state);
 
-  if (alertTarget) {
-    // Move one step toward alert origin
-    const next = stepToward(entity.pos, alertTarget, state);
-    if (next) {
-      moveEnforcer(entity, next, state);
-    }
-    // Check if arrived
-    if (entity.pos.x === alertTarget.x && entity.pos.y === alertTarget.y) {
-      alertTargets.delete(entity.id);
-    }
-    // Check if player is on same tile — detection
-    checkPlayerDetection(entity, state);
+  if (playerVisible) {
+    chaseTargets.set(entity.id, { ...state.playerState.pos });
+    lostTimers.set(entity.id, 0);
+    alertTargets.delete(entity.id);
+
+    checkDetectionConsequences(entity, state);
+
+    const next = stepToward(entity.pos, state.playerState.pos, state);
+    if (next) moveEnforcer(entity, next, state);
     return;
   }
 
-  // Normal patrol: advance to next waypoint
+  if (chaseTargets.has(entity.id)) {
+    const lost = (lostTimers.get(entity.id) ?? 0) + 1;
+    lostTimers.set(entity.id, lost);
+    if (lost >= 3) {
+      chaseTargets.delete(entity.id);
+      lostTimers.delete(entity.id);
+      const anyStillSees = [...routes.keys()].some(id => chaseTargets.has(id));
+      if (!anyStillSees) {
+        eventBus.emit('PLAYER_DETECTION_CLEARED', {});
+      }
+    } else {
+      const lastKnown = chaseTargets.get(entity.id)!;
+      const next = stepToward(entity.pos, lastKnown, state);
+      if (next) moveEnforcer(entity, next, state);
+      return;
+    }
+  }
+
+  const alertTarget = alertTargets.get(entity.id);
+  if (alertTarget) {
+    const next = stepToward(entity.pos, alertTarget, state);
+    if (next) moveEnforcer(entity, next, state);
+    if (entity.pos.x === alertTarget.x && entity.pos.y === alertTarget.y) {
+      alertTargets.delete(entity.id);
+    }
+    return;
+  }
+
   const route = routes.get(entity.id);
   if (!route) return;
-
   const target = route.waypoints[route.currentIndex];
   if (entity.pos.x === target.x && entity.pos.y === target.y) {
     route.currentIndex = (route.currentIndex + 1) % route.waypoints.length;
   }
-
   const next = stepToward(entity.pos, route.waypoints[route.currentIndex], state);
   if (next) moveEnforcer(entity, next, state);
+}
 
-  checkPlayerDetection(entity, state);
+function checkPlayerLOS(enforcer: Entity, state: WorldState): boolean {
+  const p = state.playerState.pos;
+  if (enforcer.pos.z !== p.z) return false;
+  const floorTiles = state.grid[enforcer.pos.z];
+  if (!floorTiles) return false;
+  const visible = calculateFOV(floorTiles, enforcer.pos.x, enforcer.pos.y, ENFORCER_SIGHT_RADIUS);
+  return visible.has(`${p.x},${p.y}`);
+}
+
+function checkDetectionConsequences(enforcer: Entity, state: WorldState): void {
+  const p = state.playerState;
+  const dist = Math.abs(enforcer.pos.x - p.pos.x) + Math.abs(enforcer.pos.y - p.pos.y);
+
+  eventBus.emit('PLAYER_DETECTED', { enforcerId: enforcer.id, pos: enforcer.pos });
+
+  const prev = p.complianceStatus;
+  if (p.complianceStatus === 'GREEN')       p.complianceStatus = 'YELLOW';
+  else if (p.complianceStatus === 'YELLOW') p.complianceStatus = 'RED';
+
+  if (p.complianceStatus !== prev) {
+    eventBus.emit('PLAYER_COMPLIANCE_CHANGED', { previous: prev, current: p.complianceStatus });
+  }
+
+  if (dist <= 1) {
+    p.ap = 0;
+    p.complianceStatus = 'RED';
+    state.substrateResonance = Math.min(100, state.substrateResonance + 8);
+    state.stitcherTurnsRemaining = Math.max(0, state.stitcherTurnsRemaining - 5);
+    eventBus.emit('PLAYER_DETAINED', { enforcerId: enforcer.id, turn: state.turnCount });
+  }
 }
 
 function moveEnforcer(entity: Entity, to: Vec3, state: WorldState): void {
@@ -147,9 +195,7 @@ function moveEnforcer(entity: Entity, to: Vec3, state: WorldState): void {
 
   if (fromTile) fromTile.entityIds = fromTile.entityIds.filter(id => id !== entity.id);
   entity.pos = to;
-  if (toTile) {
-    if (!toTile.entityIds.includes(entity.id)) toTile.entityIds.push(entity.id);
-  }
+  if (toTile && !toTile.entityIds.includes(entity.id)) toTile.entityIds.push(entity.id);
   eventBus.emit('ENTITY_MOVED', { entityId: entity.id, from: entity.pos, to });
 }
 
@@ -158,7 +204,6 @@ function stepToward(from: Vec3, to: Vec3, state: WorldState): Vec3 | null {
   const dy = to.y - from.y;
   if (dx === 0 && dy === 0) return null;
 
-  // Prefer the axis with greater distance; try both if blocked
   const candidates: Vec3[] = [];
   if (Math.abs(dx) >= Math.abs(dy)) {
     candidates.push({ x: from.x + Math.sign(dx), y: from.y, z: from.z });
@@ -170,22 +215,8 @@ function stepToward(from: Vec3, to: Vec3, state: WorldState): Vec3 | null {
 
   for (const c of candidates) {
     const tile = state.grid[c.z]?.[c.y]?.[c.x];
+    // Enforcers pass through doors (they have clearance)
     if (tile && tile.type !== 'WALL' && tile.type !== 'VOID') return c;
   }
   return null;
-}
-
-function checkPlayerDetection(enforcer: Entity, state: WorldState): void {
-  const p = state.playerState.pos;
-  if (enforcer.pos.z !== p.z) return;
-  const dist = Math.abs(enforcer.pos.x - p.x) + Math.abs(enforcer.pos.y - p.y);
-  if (dist <= 2) {
-    // Player detected — spike compliance status and resonance
-    if (state.playerState.complianceStatus === 'GREEN') state.playerState.complianceStatus = 'YELLOW';
-    else if (state.playerState.complianceStatus === 'YELLOW') state.playerState.complianceStatus = 'RED';
-    eventBus.emit('PLAYER_COMPLIANCE_CHANGED', {
-      previous: state.playerState.complianceStatus,
-      current: state.playerState.complianceStatus,
-    });
-  }
 }

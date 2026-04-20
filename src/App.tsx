@@ -38,6 +38,8 @@ export default function App() {
   const [showReport, setShowReport] = useState(false);
   const [worldState, setWorldState] = useState<WorldState | null>(null);
   const [redDay, setRedDay]         = useState(false);
+  const [detected, setDetected]     = useState(false);
+  const [detained, setDetained]     = useState(false);
 
   const refreshFloor = useCallback((z: FloorIndex, scene?: GameScene) => {
     const s = scene ?? sceneRef.current;
@@ -85,6 +87,9 @@ export default function App() {
       eventBus.on('RESONANCE_SHIFT',              ({ current }) => setResonance(current)),
       eventBus.on('RED_DAY_ACTIVE',               () => setRedDay(true)),
       eventBus.on('RED_DAY_CLEARED',              () => setRedDay(false)),
+      eventBus.on('PLAYER_DETECTED',              () => setDetected(true)),
+      eventBus.on('PLAYER_DETECTION_CLEARED',     () => { setDetected(false); setDetained(false); }),
+      eventBus.on('PLAYER_DETAINED',              () => { setDetected(true); setDetained(true); }),
       eventBus.on('PLAYER_MOVED',                 ({ to }) => { setFloor(to.z as FloorIndex); refreshFloor(to.z as FloorIndex); }),
       eventBus.on('TURN_END',                     () => refreshFloor(floor)),
     ];
@@ -121,6 +126,8 @@ export default function App() {
         <span>STITCHER {stitcher}t</span>
         <span>RES <span style={{ color: resonanceColor }}>{resonance.toFixed(0)}%</span></span>
         {redDay && <span style={{ color: '#a44' }}>■ RED DAY</span>}
+        {detained && <span style={{ color: '#f44', fontWeight: 'bold' }}>■ DETAINED</span>}
+        {detected && !detained && <span style={{ color: '#f84' }}>■ DETECTED</span>}
         <span style={{ color: '#334' }}>BELIEF:{belief}</span>
         <span style={{ marginLeft: 'auto', cursor: 'pointer', color: '#445' }} onClick={() => { setWorldState({ ...worldEngine.getState() } as WorldState); setShowReport(true); }}>[REPORT]</span>
       </div>
