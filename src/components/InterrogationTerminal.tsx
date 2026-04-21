@@ -48,7 +48,7 @@ const s: Record<string, React.CSSProperties> = {
   box: {
     background: '#070b0d', border: '1px solid #2a3a4a', color: '#9bbccc',
     fontFamily: '"Courier New", Courier, monospace', fontSize: '13px',
-    width: '680px', maxHeight: '82vh', overflow: 'auto', padding: '20px',
+    width: 'min(680px, 95vw)', maxHeight: '82vh', overflow: 'auto', padding: '20px',
   },
   header: { color: '#6a8a9a', fontSize: '11px', marginBottom: '6px', letterSpacing: '2px', borderBottom: '1px solid #1a2a3a', paddingBottom: '8px' },
   srp: { color: '#3a5060', fontSize: '10px', marginBottom: '14px' },

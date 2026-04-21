@@ -5,7 +5,11 @@ import { eventBus } from './engine/EventBus';
 import { GameScene } from './phaser/GameScene';
 import { InterrogationTerminal } from './components/InterrogationTerminal';
 import { VentilationReport } from './components/VentilationReport';
+import { TouchControls } from './components/TouchControls';
+import { MobileHudDrawer } from './components/MobileHudDrawer';
 import { useInput } from './hooks/useInput';
+import { useGameActions } from './hooks/useGameActions';
+import { useMobile } from './hooks/useMobile';
 import type { SubjectivityBelief, FloorIndex, WorldState, Item, ItemType } from './types/world.types';
 
 const CANVAS_W = 640;
@@ -26,6 +30,7 @@ const FLOOR_LABELS: Record<number, string> = {
 export default function App() {
   const canvasRef = useRef<HTMLDivElement>(null);
   const sceneRef  = useRef<GameScene | null>(null);
+  const isMobile  = useMobile();
 
   const [ap, setAp]                 = useState(4);
   const [condition, setCond]        = useState(100);
@@ -48,6 +53,7 @@ export default function App() {
   const [farewellModal, setFarewellModal] = useState<{ entityId: string; text: string; turn: number } | null>(null);
   const [hudAlert, setHudAlert]           = useState<{ msg: string; color: string } | null>(null);
   const [showElevator, setShowElevator]   = useState(false);
+  const [showHudDrawer, setShowHudDrawer] = useState(false);
 
   const refreshFloor = useCallback((z: FloorIndex, scene?: GameScene) => {
     const s = scene ?? sceneRef.current;
@@ -78,7 +84,6 @@ export default function App() {
     game.events.once('ready', () => {
       const scene = game.scene.getScene('GameScene') as GameScene;
       sceneRef.current = scene;
-      // Wait for scene.create() to finish before pushing tile data
       scene.events.once('scene-ready', () => refreshFloor(4, scene));
     });
     return () => game.destroy(true);
@@ -129,85 +134,144 @@ export default function App() {
 
   const resonanceColor = resonance > 75 ? '#a44' : resonance > 50 ? '#a84' : '#4a6';
 
-  useInput({
+  // Shared action callbacks — used by both keyboard (useInput) and touch controls
+  const actions = useGameActions({
     onRefresh: refreshFloor,
     onOpenTerminal: setTerminal,
+    onOpenElevator: () => setShowElevator(true),
+  });
+
+  useInput(actions, {
     onEndTurn: handleEndTurn,
     onOpenInventory: () => setShowInventory(v => !v),
-    onOpenElevator:  () => setShowElevator(true),
   });
 
   return (
     <div style={{ background: '#030507', minHeight: '100vh' }}>
-      {/* HUD */}
-      <div style={{
-        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50,
-        background: redDay ? '#0a0504' : '#050809', borderBottom: '1px solid #223',
-        color: '#7a9aaa', fontFamily: 'monospace', fontSize: '11px',
-        padding: '6px 12px', display: 'flex', gap: '24px', alignItems: 'center',
-      }}>
-        <span>AP {ap}/{worldEngine.getState().playerState.maxAP}</span>
-        <span>COND {condition}</span>
-        <span style={{ color: compliance === 'RED' ? '#a44' : compliance === 'GREEN' ? '#4a6' : '#a84' }}>{compliance}</span>
-        <span>STITCHER {stitcher}t</span>
-        <span>RES <span style={{ color: resonanceColor }}>{resonance.toFixed(0)}%</span></span>
-        {redDay && <span style={{ color: '#a44' }}>■ RED DAY</span>}
-        {detained && <span style={{ color: '#f44', fontWeight: 'bold' }}>■ DETAINED</span>}
-        {detected && !detained && <span style={{ color: '#f84' }}>■ DETECTED</span>}
-        {hudAlert && <span style={{ color: hudAlert.color }}>{hudAlert.msg}</span>}
-        {ambientLevel !== 'LIT' && <span style={{ color: '#334' }}>◐ {ambientLevel}</span>}
-        {flashlightOn && <span style={{ color: '#ffdd44' }}>◈ TORCH {flashlightBattery}t</span>}
-        {inventory.length > 0 && (
-          <span style={{ color: '#556', cursor: 'pointer' }} onClick={() => setShowInventory(v => !v)}>
-            [INV:{inventory.length}]
-          </span>
-        )}
-        <span style={{ color: '#334' }}>BELIEF:{belief}</span>
-        <span style={{ marginLeft: 'auto', cursor: 'pointer', color: '#445' }} onClick={() => { setWorldState({ ...worldEngine.getState() } as WorldState); setShowReport(true); }}>[REPORT]</span>
-      </div>
 
+      {/* ── DESKTOP HUD ── */}
+      {!isMobile && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50,
+          background: redDay ? '#0a0504' : '#050809', borderBottom: '1px solid #223',
+          color: '#7a9aaa', fontFamily: 'monospace', fontSize: '11px',
+          padding: '6px 12px', display: 'flex', gap: '24px', alignItems: 'center',
+        }}>
+          <span>AP {ap}/{worldEngine.getState().playerState.maxAP}</span>
+          <span>COND {condition}</span>
+          <span style={{ color: compliance === 'RED' ? '#a44' : compliance === 'GREEN' ? '#4a6' : '#a84' }}>{compliance}</span>
+          <span>STITCHER {stitcher}t</span>
+          <span>RES <span style={{ color: resonanceColor }}>{resonance.toFixed(0)}%</span></span>
+          {redDay && <span style={{ color: '#a44' }}>■ RED DAY</span>}
+          {detained && <span style={{ color: '#f44', fontWeight: 'bold' }}>■ DETAINED</span>}
+          {detected && !detained && <span style={{ color: '#f84' }}>■ DETECTED</span>}
+          {hudAlert && <span style={{ color: hudAlert.color }}>{hudAlert.msg}</span>}
+          {ambientLevel !== 'LIT' && <span style={{ color: '#334' }}>◐ {ambientLevel}</span>}
+          {flashlightOn && <span style={{ color: '#ffdd44' }}>◈ TORCH {flashlightBattery}t</span>}
+          {inventory.length > 0 && (
+            <span style={{ color: '#556', cursor: 'pointer' }} onClick={() => setShowInventory(v => !v)}>
+              [INV:{inventory.length}]
+            </span>
+          )}
+          <span style={{ color: '#334' }}>BELIEF:{belief}</span>
+          <span style={{ marginLeft: 'auto', cursor: 'pointer', color: '#445' }} onClick={() => { setWorldState({ ...worldEngine.getState() } as WorldState); setShowReport(true); }}>[REPORT]</span>
+        </div>
+      )}
+
+      {/* ── MOBILE HUD (compact row) ── */}
+      {isMobile && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50,
+          background: redDay ? '#0a0504' : '#050809', borderBottom: '1px solid #223',
+          color: '#7a9aaa', fontFamily: 'monospace', fontSize: '11px',
+          padding: '6px 10px', display: 'flex', gap: '12px', alignItems: 'center',
+          height: '32px',
+        }}>
+          <span>AP {ap}/{worldEngine.getState().playerState.maxAP}</span>
+          <span>COND {condition}</span>
+          <span style={{ color: compliance === 'RED' ? '#a44' : compliance === 'GREEN' ? '#4a6' : '#a84' }}>{compliance}</span>
+          {redDay && <span style={{ color: '#a44' }}>■ RED</span>}
+          {detained && <span style={{ color: '#f44', fontWeight: 'bold' }}>■ DET</span>}
+          {detected && !detained && <span style={{ color: '#f84' }}>■ DET</span>}
+          {hudAlert && <span style={{ color: hudAlert.color, fontSize: '10px' }}>{hudAlert.msg}</span>}
+          {flashlightOn && <span style={{ color: '#ffdd44' }}>◈{flashlightBattery}t</span>}
+          <span
+            style={{ marginLeft: 'auto', cursor: 'pointer', color: '#4a8aaa', fontSize: '14px', padding: '0 4px' }}
+            onPointerDown={() => setShowHudDrawer(v => !v)}
+          >
+            ≡
+          </span>
+        </div>
+      )}
+
+      {/* ── MOBILE HUD DRAWER ── */}
+      {isMobile && showHudDrawer && (
+        <MobileHudDrawer
+          stitcher={stitcher}
+          resonance={resonance}
+          belief={belief}
+          ambientLevel={ambientLevel}
+          currentFloor={floor}
+          onFloorSelect={(f) => { setFloor(f); refreshFloor(f); }}
+          onShowReport={() => { setWorldState({ ...worldEngine.getState() } as WorldState); setShowReport(true); }}
+          onClose={() => setShowHudDrawer(false)}
+        />
+      )}
+
+      {/* ── MAIN LAYOUT ── */}
       <div style={{ display: 'flex', paddingTop: '32px' }}>
         <div ref={canvasRef} style={{ flex: 1, height: 'calc(100vh - 32px)', overflow: 'hidden' }} />
 
-        {/* Sidebar */}
-        <div style={{ width: '220px', padding: '12px', fontFamily: 'monospace', fontSize: '11px', color: '#556', borderLeft: '1px solid #223' }}>
-          <div style={{ marginBottom: '10px' }}>
-            <div style={{ color: '#445', marginBottom: '4px' }}>FLOOR SELECT</div>
-            {Array.from({ length: 12 }, (_, i) => (
-              <button key={i} onClick={() => { setFloor(i as FloorIndex); refreshFloor(i as FloorIndex); }} style={{
-                display: 'block', width: '100%', textAlign: 'left',
-                background: i === floor ? '#112' : 'transparent',
-                border: '1px solid ' + (i === floor ? '#336' : '#223'),
-                color: i % 2 === 1 ? '#1a3a1a' : i === floor ? '#8ab' : '#445',
-                fontFamily: 'monospace', fontSize: '10px', padding: '2px 6px', marginBottom: '2px', cursor: 'pointer',
-              }}>
-                {String(i).padStart(2, '0')} {i % 2 === 1 ? '[VENT]' : (FLOOR_LABELS[i] ?? '')}
-              </button>
-            ))}
-          </div>
+        {/* Desktop sidebar — hidden on mobile */}
+        {!isMobile && (
+          <div style={{ width: '220px', padding: '12px', fontFamily: 'monospace', fontSize: '11px', color: '#556', borderLeft: '1px solid #223' }}>
+            <div style={{ marginBottom: '10px' }}>
+              <div style={{ color: '#445', marginBottom: '4px' }}>FLOOR SELECT</div>
+              {Array.from({ length: 12 }, (_, i) => (
+                <button key={i} onClick={() => { setFloor(i as FloorIndex); refreshFloor(i as FloorIndex); }} style={{
+                  display: 'block', width: '100%', textAlign: 'left',
+                  background: i === floor ? '#112' : 'transparent',
+                  border: '1px solid ' + (i === floor ? '#336' : '#223'),
+                  color: i % 2 === 1 ? '#1a3a1a' : i === floor ? '#8ab' : '#445',
+                  fontFamily: 'monospace', fontSize: '10px', padding: '2px 6px', marginBottom: '2px', cursor: 'pointer',
+                }}>
+                  {String(i).padStart(2, '0')} {i % 2 === 1 ? '[VENT]' : (FLOOR_LABELS[i] ?? '')}
+                </button>
+              ))}
+            </div>
 
-          <div style={{ marginBottom: '10px' }}>
-            <div style={{ color: '#445', marginBottom: '4px' }}>VENT-4 / F{floor}</div>
-            {worldEngine.getVentMapData().filter(v => v.floor === floor).map(v => (
-              <div key={v.floor} style={{ color: v.priority === 'LOW' ? '#a44' : v.priority === 'HIGH' ? '#4a6' : '#a84' }}>
-                {(v.allocation * 100).toFixed(0)}% [{v.priority}]
-              </div>
-            ))}
-          </div>
+            <div style={{ marginBottom: '10px' }}>
+              <div style={{ color: '#445', marginBottom: '4px' }}>VENT-4 / F{floor}</div>
+              {worldEngine.getVentMapData().filter(v => v.floor === floor).map(v => (
+                <div key={v.floor} style={{ color: v.priority === 'LOW' ? '#a44' : v.priority === 'HIGH' ? '#4a6' : '#a84' }}>
+                  {(v.allocation * 100).toFixed(0)}% [{v.priority}]
+                </div>
+              ))}
+            </div>
 
-          <div>
-            <div style={{ color: '#445', marginBottom: '4px' }}>ACTIONS</div>
-            <button style={sideBtn} onClick={handleEndTurn}>END TURN</button>
-            <button style={sideBtn} onClick={() => setTerminal('EIRA-7')}>INTERROGATE EIRA-7</button>
-            <button style={sideBtn} onClick={() => setTerminal('APEX-19')}>INTERROGATE APEX-19</button>
-            <button style={sideBtn} onClick={() => setTerminal('ALFAR-22')}>INTERROGATE ALFAR-22</button>
-          </div>
+            <div>
+              <div style={{ color: '#445', marginBottom: '4px' }}>ACTIONS</div>
+              <button style={sideBtn} onClick={handleEndTurn}>END TURN</button>
+              <button style={sideBtn} onClick={() => setTerminal('EIRA-7')}>INTERROGATE EIRA-7</button>
+              <button style={sideBtn} onClick={() => setTerminal('APEX-19')}>INTERROGATE APEX-19</button>
+              <button style={sideBtn} onClick={() => setTerminal('ALFAR-22')}>INTERROGATE ALFAR-22</button>
+            </div>
 
-          <div style={{ marginTop: '16px', color: '#1a2a2a', fontSize: '9px', lineHeight: '1.4' }}>
-            {worldEngine.getMiradorDisclaimer()}
+            <div style={{ marginTop: '16px', color: '#1a2a2a', fontSize: '9px', lineHeight: '1.4' }}>
+              {worldEngine.getMiradorDisclaimer()}
+            </div>
           </div>
-        </div>
+        )}
       </div>
+
+      {/* ── MOBILE TOUCH CONTROLS ── */}
+      {isMobile && (
+        <TouchControls
+          actions={actions}
+          onEndTurn={handleEndTurn}
+          onOpenInventory={() => setShowInventory(v => !v)}
+        />
+      )}
 
       {terminalTarget && (
         <InterrogationTerminal entityId={terminalTarget} subjectivityBelief={belief} onClose={() => setTerminal(null)} />
@@ -224,7 +288,9 @@ export default function App() {
 
       {showInventory && (
         <div style={{
-          position: 'fixed', bottom: '48px', right: '230px',
+          position: 'fixed',
+          bottom: isMobile ? '172px' : '48px',
+          right: isMobile ? '12px' : '230px',
           background: '#06090b', border: '1px solid #2a3a4a',
           padding: '12px', fontFamily: 'monospace', fontSize: '11px',
           color: '#9bbccc', zIndex: 150, width: '210px',
@@ -255,7 +321,7 @@ export default function App() {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           zIndex: 200, fontFamily: 'monospace',
         }}>
-          <div style={{ background: '#050d15', border: '1px solid #004488', padding: '24px', width: '300px' }}>
+          <div style={{ background: '#050d15', border: '1px solid #004488', padding: '24px', width: 'min(300px, 90vw)' }}>
             <div style={{ color: '#4488cc', fontSize: '10px', letterSpacing: '3px', marginBottom: '16px' }}>
               ELEVATOR — SELECT DESTINATION
             </div>
@@ -267,7 +333,7 @@ export default function App() {
                 <button
                   key={f}
                   disabled={isCurrent}
-                  onClick={() => {
+                  onPointerDown={() => {
                     const ok = worldEngine.elevatorTo(f);
                     if (ok) { setFloor(f); refreshFloor(f); setShowElevator(false); }
                   }}
@@ -286,7 +352,7 @@ export default function App() {
               );
             })}
             <button style={{ ...sideBtn, marginTop: '8px', color: '#4a6070', borderColor: '#2a3a4a' }}
-              onClick={() => setShowElevator(false)}>
+              onPointerDown={() => setShowElevator(false)}>
               CANCEL
             </button>
           </div>
