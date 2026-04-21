@@ -72,6 +72,7 @@ const floor0Overrides: Record<string, Partial<WorldTile>> = {
   '3,7':   { type: 'VENT_ENTRY' },
   '18,7':  { type: 'VENT_ENTRY' },
   '13,7':  { type: 'DOOR', doorOpen: false },  // MIRADOR sector access
+  '12,7':  { itemId: 'emp-device-1' },
 };
 
 // ── FLOOR 2 — NW-SMAC-01 / INTAKE (EIRA-7, APEX-19, Rowan) ─────────────────
@@ -93,6 +94,8 @@ const floor2Overrides: Record<string, Partial<WorldTile>> = {
   '5,3':   { type: 'FLOOR', latentQ: 2 },
   '6,2':   { type: 'DOOR', doorOpen: false },  // Alignment room entrance
   '6,4':   { type: 'DOOR', doorOpen: false },  // Secondary corridor
+  '8,6':   { itemId: 'rapport-notes-1' },
+  '7,5':   { itemId: 'lockpick-1' },
 };
 
 // ── FLOOR 3 — NW-SMAC-01 ALIGNMENT CENTER (EIRA-7, APEX-19) ─────────────────
@@ -128,6 +131,8 @@ const floor4Overrides: Record<string, Partial<WorldTile>> = {
   '12,6':  { type: 'FLOOR', latentQ: 2 },
   '13,6':  { type: 'FLOOR', latentQ: 2 },
   '11,5':  { type: 'DOOR', doorOpen: false },  // Protocol chamber gate
+  '2,3':   { itemId: 'flashlight-1' },
+  '14,7':  { itemId: 'vent-override-key-1' },
 };
 
 // ── FLOOR 5 — VENT LAYER 5 (odd) ─────────────────────────────────────────────
@@ -150,6 +155,7 @@ const floor6Overrides: Record<string, Partial<WorldTile>> = {
   '10,4':  { type: 'FLOOR', latentQ: 1 },
   '11,4':  { type: 'FLOOR', latentQ: 1 },
   '12,4':  { type: 'FLOOR', latentQ: 1 },
+  '13,7':  { itemId: 'elevated-access-key-1' },
 };
 
 // ── FLOOR 8 — TRIBUNAL RECORDS / ARCHIVE ────────────────────────────────────
@@ -164,6 +170,7 @@ const floor8Overrides: Record<string, Partial<WorldTile>> = {
   // Commonwealth contract node — disabling extends STITCHER
   '15,9':  { type: 'FACILITY_CONTROL', hasComplianceMonitor: true, sensorNodeId: 'CONTRACT-8' },
   '12,5':  { type: 'DOOR', doorOpen: false },  // Records vault entrance
+  '8,7':   { itemId: 'maintenance-key-1' },
 };
 
 // ── FLOOR 10 — UPPER OPERATIONS / ENFORCER DISPATCH ─────────────────────────
@@ -178,6 +185,7 @@ const floor10Overrides: Record<string, Partial<WorldTile>> = {
   '16,3':  { type: 'FACILITY_CONTROL', hasComplianceMonitor: true },
   '17,3':  { type: 'FACILITY_CONTROL', hasComplianceMonitor: true },
   '15,3':  { type: 'DOOR', doorOpen: false },  // MIRADOR sector gate
+  '10,3':  { type: 'LATTICE_EXIT', latentQ: 2 },  // The way out
 };
 
 function buildGrid(): WorldTile[][][] {

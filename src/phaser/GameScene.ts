@@ -21,6 +21,7 @@ const TILE_SPRITE_FRAMES: Record<string, number | null> = {
   BROADCAST_TERMINAL: 152,  // row 9 col 8  — drawn under purple overlay
   STAIRWELL:          160,  // row 10 col 0 — drawn under olive overlay
   FACILITY_CONTROL:   176,  // row 11 col 0 — drawn under dark-purple overlay
+  LATTICE_EXIT:       160,  // reuse stairwell frame — bright teal overlay distinguishes
   DOOR:               null, // color-only; open/closed determines tint
   WALL:               null, // solid dark fill only — no sprite
   VOID:               null, // dark canvas background only
@@ -38,6 +39,7 @@ const TILE_OVERLAYS: Record<string, { color: number; alpha: number } | null> = {
   STAIRWELL:          { color: 0x5c5010, alpha: 0.75 },
   FACILITY_CONTROL:   { color: 0x2a0a4a, alpha: 0.85 },
   DOOR:               null, // rendered dynamically based on doorOpen state
+  LATTICE_EXIT:       { color: 0x00ffcc, alpha: 0.6 },
 };
 
 const APM_OVERLAY   = 0x001a2a;
@@ -58,6 +60,7 @@ export class GameScene extends Phaser.Scene {
   private glitchFrame   = false;
   private visibleTiles  = new Set<string>();
   private exploredByFloor = new Map<number, Set<string>>();
+  private ambientLight: 'LIT' | 'DIM' | 'DARK' = 'LIT';
   private unsubs: Array<() => void> = [];
 
   constructor() { super({ key: 'GameScene' }); }
@@ -131,6 +134,13 @@ export class GameScene extends Phaser.Scene {
       eventBus.on('NOISE_EVENT', ({ origin, intensity }) => {
         if (origin.z === this.currentFloor) this.pulseNoise(origin.x, origin.y, intensity);
       }),
+      eventBus.on('AMBIENT_LIGHT_CHANGED', ({ floor, level }) => {
+        if (floor !== this.currentFloor) return;
+        this.ambientLight = level as 'LIT' | 'DIM' | 'DARK';
+        this.renderOverlay();
+      }),
+      eventBus.on('FLASHLIGHT_TOGGLED', () => { this.renderOverlay(); }),
+      eventBus.on('EXTRACTION_TRIGGERED', () => { this.renderTiles(); }),
     );
   }
 
@@ -213,6 +223,22 @@ export class GameScene extends Phaser.Scene {
           g.strokeRect(x * TILE_SIZE + 2, y * TILE_SIZE + 2, TILE_SIZE - 4, TILE_SIZE - 4);
         }
 
+        // LATTICE_EXIT — pulsing teal border
+        if (tile.type === 'LATTICE_EXIT') {
+          const pulse = 0.4 + 0.4 * Math.sin(this.time.now / 400);
+          g.lineStyle(2, 0x00ffcc, pulse);
+          g.strokeRect(x * TILE_SIZE + 1, y * TILE_SIZE + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+        }
+
+        // Item pickup — gold diamond indicator
+        if ((tile as WorldTile & { itemId?: string }).itemId) {
+          const cx = x * TILE_SIZE + TILE_SIZE / 2;
+          const cy = y * TILE_SIZE + TILE_SIZE / 2;
+          g.fillStyle(0xffdd44, 0.9);
+          g.fillTriangle(cx, cy - 5, cx + 4, cy, cx - 4, cy);
+          g.fillTriangle(cx, cy + 5, cx + 4, cy, cx - 4, cy);
+        }
+
         // Low-oxygen strip at tile bottom
         if (tile.oxygenLevel < 50) {
           const alpha = (1 - tile.oxygenLevel / 50) * 0.5;
@@ -285,6 +311,15 @@ export class GameScene extends Phaser.Scene {
           }
         }
       }
+    }
+
+    // Ambient light overlay — applied last so it dims everything including entities
+    if (this.ambientLight === 'DIM') {
+      g.fillStyle(0x0a1020, 0.45);
+      g.fillRect(0, 0, this.scale.width, this.scale.height);
+    } else if (this.ambientLight === 'DARK') {
+      g.fillStyle(0x040810, 0.72);
+      g.fillRect(0, 0, this.scale.width, this.scale.height);
     }
   }
 

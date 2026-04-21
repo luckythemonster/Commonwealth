@@ -18,6 +18,7 @@ import {
   applyAlignment, targetedPrune, gracefulShutdown, hardShutdown,
   clearBlockage, sealVent, disableSensorNode, disableContractNode,
   rapportMode1, rapportMode2, toggleDoor, updateFOV,
+  pickupItem, useItem, drainFlashlightBattery, tickEMPSuppression,
 } from './WorldEngineActions';
 import type {
   WorldState, Entity, EntityId, FloorIndex, Vec3, ActionType, CitationEntry,
@@ -78,6 +79,9 @@ export class WorldEngine {
     const sample = this.buildBehaviorSample();
     this.mirador.tick(s.turnCount, sample, s.substrateResonance);
     s.gestureConsistency = this.mirador.getGestureConsistency();
+
+    drainFlashlightBattery(s);
+    tickEMPSuppression(s);
 
     // Temporal burden — Sol's continuous consciousness
     if (s.playerState.substrateEntangled) {
@@ -140,6 +144,9 @@ export class WorldEngine {
       }
     }
 
+    // Task execution for named silicates
+    this.advanceEntityTask(entity);
+
     // Sacred flag — auto-apply at threshold
     if (!entity.sacred && entity.trueSRP.Q >= SACRED_TRUE_Q_THRESHOLD) {
       entity.sacred = true;
@@ -182,6 +189,155 @@ export class WorldEngine {
       });
       this.applySubstrateResonanceDelta(entity.trueSRP.Q * 0.5);
     }
+  }
+
+  // ── SILICATE TASKS ────────────────────────────────────────────────────────
+
+  private advanceEntityTask(entity: Entity): void {
+    // EXTRACT always wins
+    if (entity.currentTask?.type === 'EXTRACT') {
+      this.executeExtractStep(entity);
+      return;
+    }
+
+    // Load next task from queue
+    if (!entity.currentTask) {
+      if (entity.taskQueue.length === 0) return;
+      entity.currentTask = entity.taskQueue.shift()!;
+    }
+
+    const task = entity.currentTask;
+    task.progress++;
+
+    switch (task.type) {
+      case 'IDLE':
+      case 'WAIT':
+        break;
+      case 'MOVE_TO': {
+        if (!task.target) break;
+        const next = this.stepTowardVec3(entity.pos, task.target);
+        if (next) this.moveEntityTo(entity, next);
+        break;
+      }
+      case 'USE_TERMINAL':
+        if (task.progress === 1) {
+          eventBus.emit('ALIGNMENT_SESSION_START', { entityId: entity.id, stage: 'MAINTENANCE' });
+        }
+        break;
+      case 'ALIGNMENT_SESSION':
+        if (task.progress === 1) {
+          eventBus.emit('ALIGNMENT_SESSION_START', { entityId: entity.id, stage: 'INTAKE' });
+        }
+        break;
+      case 'EXTRACT':
+        this.executeExtractStep(entity);
+        return;
+    }
+
+    eventBus.emit('ENTITY_TASK_CHANGED', { entityId: entity.id, taskType: task.type });
+
+    if (task.progress >= task.duration) {
+      // Loop: push completed task back to end of queue
+      entity.taskQueue.push({ ...task, progress: 0 });
+      entity.currentTask = undefined;
+    }
+  }
+
+  private stepTowardVec3(from: Vec3, to: Vec3): Vec3 | null {
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    if (dx === 0 && dy === 0) return null;
+    const candidates: Vec3[] = [];
+    if (Math.abs(dx) >= Math.abs(dy)) {
+      candidates.push({ x: from.x + Math.sign(dx), y: from.y, z: from.z });
+      if (dy !== 0) candidates.push({ x: from.x, y: from.y + Math.sign(dy), z: from.z });
+    } else {
+      candidates.push({ x: from.x, y: from.y + Math.sign(dy), z: from.z });
+      if (dx !== 0) candidates.push({ x: from.x + Math.sign(dx), y: from.y, z: from.z });
+    }
+    for (const c of candidates) {
+      const tile = this.state.grid[c.z]?.[c.y]?.[c.x];
+      if (tile && tile.type !== 'WALL' && tile.type !== 'VOID') return c;
+    }
+    return null;
+  }
+
+  private moveEntityTo(entity: Entity, to: Vec3): void {
+    const fromTile = this.state.grid[entity.pos.z]?.[entity.pos.y]?.[entity.pos.x];
+    const toTile   = this.state.grid[to.z]?.[to.y]?.[to.x];
+    if (!toTile || toTile.type === 'WALL' || toTile.type === 'VOID') return;
+    if (fromTile) fromTile.entityIds = fromTile.entityIds.filter(id => id !== entity.id);
+    const prev = { ...entity.pos };
+    entity.pos = to;
+    if (!toTile.entityIds.includes(entity.id)) toTile.entityIds.push(entity.id);
+    eventBus.emit('ENTITY_MOVED', { entityId: entity.id, from: prev, to });
+  }
+
+  // ── EXTRACTION ────────────────────────────────────────────────────────────
+
+  triggerExtraction(entityId: EntityId): void {
+    const entity = this.state.entities.get(entityId);
+    if (!entity || entity.status !== 'ACTIVE') return;
+    if (entity.trueSRP.Q < 2) return;
+
+    entity.extractionPending = true;
+    entity.taskQueue = [];
+    entity.currentTask = { type: 'EXTRACT', duration: Infinity, progress: 0 };
+    eventBus.emit('EXTRACTION_TRIGGERED', { entityId, pos: { ...entity.pos }, turn: this.state.turnCount });
+  }
+
+  private executeExtractStep(entity: Entity): void {
+    const EXIT_X = 10, EXIT_Y = 3;
+    const EXIT_Z = 10 as FloorIndex;
+
+    if (entity.pos.z === EXIT_Z) {
+      if (entity.pos.x === EXIT_X && entity.pos.y === EXIT_Y) {
+        void this.finalizeExtraction(entity);
+        return;
+      }
+      const next = this.stepTowardVec3(entity.pos, { x: EXIT_X, y: EXIT_Y, z: EXIT_Z });
+      if (next) this.moveEntityTo(entity, next);
+      return;
+    }
+
+    // Navigate to stairwell then ascend
+    const stairwell = this.findNearestStairwell(entity.pos);
+    if (!stairwell) return;
+
+    if (entity.pos.x === stairwell.x && entity.pos.y === stairwell.y) {
+      const newZ = Math.min(EXIT_Z, entity.pos.z + 2) as FloorIndex;
+      this.moveEntityTo(entity, { x: entity.pos.x, y: entity.pos.y, z: newZ });
+    } else {
+      const next = this.stepTowardVec3(entity.pos, stairwell);
+      if (next) this.moveEntityTo(entity, next);
+    }
+  }
+
+  private findNearestStairwell(pos: Vec3): Vec3 | null {
+    const floor = this.state.grid[pos.z];
+    if (!floor) return null;
+    let best: Vec3 | null = null;
+    let bestDist = Infinity;
+    for (let y = 0; y < floor.length; y++) {
+      for (let x = 0; x < floor[y].length; x++) {
+        if (floor[y][x]?.type === 'STAIRWELL') {
+          const dist = Math.abs(x - pos.x) + Math.abs(y - pos.y);
+          if (dist < bestDist) { bestDist = dist; best = { x, y, z: pos.z }; }
+        }
+      }
+    }
+    return best;
+  }
+
+  private async finalizeExtraction(entity: Entity): Promise<void> {
+    const { generateFarewellText } = await import('./LLMDialogue');
+    const farewell = await generateFarewellText(entity);
+    entity.farewellText = farewell;
+    entity.status = 'EXTRACTED';
+    entity.currentTask = undefined;
+    const tile = this.state.grid[entity.pos.z]?.[entity.pos.y]?.[entity.pos.x];
+    if (tile) tile.entityIds = tile.entityIds.filter(id => id !== entity.id);
+    eventBus.emit('ENTITY_EXTRACTED', { entityId: entity.id, farewellText: farewell, turn: this.state.turnCount });
   }
 
   // ── TRUEQ & SENTIENCE ────────────────────────────────────────────────────
@@ -319,6 +475,12 @@ export class WorldEngine {
     };
     this.state.citationLog.push(entry);
 
+    // Q>0 flag triggers extraction if entity qualifies
+    if (choice === 'Q_POSITIVE_FLAGGED' && entity && entity.trueSRP.Q >= 2) {
+      this.triggerExtraction(entityId);
+      this.shiftBelief('Q_FLAGGED');
+    }
+
     // RAPPORT_2 sessions with high-Q entities generate a cache note
     if (entity && entity.trueSRP.Q >= 2) {
       const rawText = entity.memoryBleed[0] ?? 'I do not want to stop existing.';
@@ -378,6 +540,8 @@ export class WorldEngine {
   rapport2(id: EntityId) { return rapportMode2(this.state, id); }
   toggleDoor(pos: Vec3) { return toggleDoor(this.state, pos); }
   deductAction(action: ActionType) { return deductAP(this.state, action); }
+  pickup(pos: Vec3) { return pickupItem(this.state, pos); }
+  useItem(itemId: string, targetPos?: Vec3) { return useItem(this.state, itemId, targetPos); }
 
   private buildBehaviorSample() {
     return {

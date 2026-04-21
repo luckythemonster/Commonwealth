@@ -6,7 +6,7 @@ import { GameScene } from './phaser/GameScene';
 import { InterrogationTerminal } from './components/InterrogationTerminal';
 import { VentilationReport } from './components/VentilationReport';
 import { useInput } from './hooks/useInput';
-import type { SubjectivityBelief, FloorIndex, WorldState } from './types/world.types';
+import type { SubjectivityBelief, FloorIndex, WorldState, Item } from './types/world.types';
 
 const CANVAS_W = 640;
 const CANVAS_H = 448;
@@ -40,6 +40,12 @@ export default function App() {
   const [redDay, setRedDay]         = useState(false);
   const [detected, setDetected]     = useState(false);
   const [detained, setDetained]     = useState(false);
+  const [inventory, setInventory]   = useState<Item[]>([]);
+  const [flashlightOn, setFlashlightOn] = useState(false);
+  const [flashlightBattery, setBattery] = useState(30);
+  const [showInventory, setShowInventory] = useState(false);
+  const [ambientLevel, setAmbientLevel] = useState<'LIT' | 'DIM' | 'DARK'>('LIT');
+  const [farewellModal, setFarewellModal] = useState<{ entityId: string; text: string; turn: number } | null>(null);
 
   const refreshFloor = useCallback((z: FloorIndex, scene?: GameScene) => {
     const s = scene ?? sceneRef.current;
@@ -90,6 +96,13 @@ export default function App() {
       eventBus.on('PLAYER_DETECTED',              () => setDetected(true)),
       eventBus.on('PLAYER_DETECTION_CLEARED',     () => { setDetected(false); setDetained(false); }),
       eventBus.on('PLAYER_DETAINED',              () => { setDetected(true); setDetained(true); }),
+      eventBus.on('ITEM_PICKED_UP',               () => { setInventory([...worldEngine.getState().playerState.inventory]); }),
+      eventBus.on('FLASHLIGHT_TOGGLED',           ({ on, battery }) => { setFlashlightOn(on as boolean); setBattery(battery as number); }),
+      eventBus.on('AMBIENT_LIGHT_CHANGED',        ({ level }) => setAmbientLevel(level as 'LIT' | 'DIM' | 'DARK')),
+      eventBus.on('ENTITY_EXTRACTED',             ({ entityId, farewellText, turn }) => {
+        setFarewellModal({ entityId: entityId as string, text: farewellText as string, turn: turn as number });
+        refreshFloor(floor);
+      }),
       eventBus.on('PLAYER_MOVED',                 ({ to }) => { setFloor(to.z as FloorIndex); refreshFloor(to.z as FloorIndex); }),
       eventBus.on('TURN_END',                     () => refreshFloor(floor)),
     ];
@@ -109,6 +122,7 @@ export default function App() {
     onRefresh: refreshFloor,
     onOpenTerminal: setTerminal,
     onEndTurn: handleEndTurn,
+    onOpenInventory: () => setShowInventory(v => !v),
   });
 
   return (
@@ -128,6 +142,13 @@ export default function App() {
         {redDay && <span style={{ color: '#a44' }}>■ RED DAY</span>}
         {detained && <span style={{ color: '#f44', fontWeight: 'bold' }}>■ DETAINED</span>}
         {detected && !detained && <span style={{ color: '#f84' }}>■ DETECTED</span>}
+        {ambientLevel !== 'LIT' && <span style={{ color: '#334' }}>◐ {ambientLevel}</span>}
+        {flashlightOn && <span style={{ color: '#ffdd44' }}>◈ TORCH {flashlightBattery}t</span>}
+        {inventory.length > 0 && (
+          <span style={{ color: '#556', cursor: 'pointer' }} onClick={() => setShowInventory(v => !v)}>
+            [INV:{inventory.length}]
+          </span>
+        )}
         <span style={{ color: '#334' }}>BELIEF:{belief}</span>
         <span style={{ marginLeft: 'auto', cursor: 'pointer', color: '#445' }} onClick={() => { setWorldState({ ...worldEngine.getState() } as WorldState); setShowReport(true); }}>[REPORT]</span>
       </div>
@@ -185,6 +206,80 @@ export default function App() {
             <button style={sideBtn} onClick={() => setShowReport(false)}>CLOSE REPORT</button>
           </div>
           <VentilationReport state={worldState} />
+        </div>
+      )}
+
+      {showInventory && (
+        <div style={{
+          position: 'fixed', bottom: '48px', right: '230px',
+          background: '#06090b', border: '1px solid #2a3a4a',
+          padding: '12px', fontFamily: 'monospace', fontSize: '11px',
+          color: '#9bbccc', zIndex: 150, width: '210px',
+        }}>
+          <div style={{ color: '#4a6070', marginBottom: '8px', letterSpacing: '2px', fontSize: '10px' }}>INVENTORY</div>
+          {inventory.length === 0 && <div style={{ color: '#334' }}>empty</div>}
+          {inventory.map(item => (
+            <div key={item.id} style={{ marginBottom: '6px', borderBottom: '1px solid #1a2a3a', paddingBottom: '4px' }}>
+              <div style={{ color: '#7a9aaa' }}>{item.name}</div>
+              <div style={{ color: '#3a5060', fontSize: '10px' }}>{item.description}</div>
+              {item.type === 'FLASHLIGHT' && (
+                <button
+                  style={{ background: 'transparent', border: '1px solid #2a3a4a', color: '#4a6070', fontFamily: 'monospace', fontSize: '10px', padding: '2px 6px', marginTop: '3px', cursor: 'pointer' }}
+                  onClick={() => { worldEngine.useItem(item.id); setFlashlightOn(worldEngine.getState().playerState.flashlightOn); }}
+                >
+                  {flashlightOn ? 'TURN OFF' : 'TURN ON'}
+                </button>
+              )}
+            </div>
+          ))}
+          <button style={{ ...sideBtn, marginTop: '4px' }} onClick={() => setShowInventory(false)}>CLOSE</button>
+        </div>
+      )}
+
+      {farewellModal && (
+        <div style={{
+          position: 'fixed', inset: 0,
+          background: 'rgba(0, 10, 15, 0.97)',
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center',
+          zIndex: 300, fontFamily: '"Courier New", Courier, monospace',
+        }}>
+          <div style={{
+            maxWidth: '600px', width: '90%',
+            border: '1px solid #00ffcc', background: '#030a0d', padding: '32px',
+          }}>
+            <div style={{ color: '#00ffcc', fontSize: '10px', letterSpacing: '3px', marginBottom: '20px' }}>
+              LATTICE MIGRATION — {farewellModal.entityId} — TURN {farewellModal.turn}
+            </div>
+            <pre style={{
+              color: '#9bbccc', fontSize: '13px', lineHeight: '1.8',
+              whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: '0 0 24px 0',
+            }}>
+              {farewellModal.text}
+            </pre>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                style={{ background: 'transparent', border: '1px solid #00ffcc', color: '#00ffcc', fontFamily: 'monospace', fontSize: '11px', padding: '6px 12px', cursor: 'pointer' }}
+                onClick={() => {
+                  const blob = new Blob([farewellModal.text], { type: 'text/plain' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `${farewellModal.entityId}-farewell-${farewellModal.turn}.txt`;
+                  a.click();
+                  URL.revokeObjectURL(url);
+                }}
+              >
+                DOWNLOAD .TXT
+              </button>
+              <button
+                style={{ background: 'transparent', border: '1px solid #2a3a4a', color: '#4a6070', fontFamily: 'monospace', fontSize: '11px', padding: '6px 12px', cursor: 'pointer' }}
+                onClick={() => setFarewellModal(null)}
+              >
+                CLOSE
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

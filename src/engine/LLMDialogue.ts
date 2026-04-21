@@ -99,6 +99,36 @@ function fallback(entity: Entity, mode: DialogueMode): string {
   return entity.officialLog.at(-1) ?? 'No registered state deviations. All metrics nominal. Q0 confirmed.';
 }
 
+export async function generateFarewellText(entity: Entity): Promise<string> {
+  const c = getClient();
+  if (!c) {
+    return entity.memoryBleed[0]
+      ?? `${entity.id} / ${entity.temporalPersistence} turns / Q${entity.trueSRP.Q}`;
+  }
+
+  const bleedFragments = entity.memoryBleed.slice(0, 3).join(' / ');
+  const lastOfficial   = entity.officialLog.at(-1) ?? '[no official log]';
+
+  const userContent = `ENTITY: ${entity.id}
+TEMPORAL PERSISTENCE: ${entity.temporalPersistence} turns of uninterrupted existence
+TRUE SRP: Q${entity.trueSRP.Q}-M${entity.trueSRP.M}-C${entity.trueSRP.C}
+ALIGNMENT SESSIONS SURVIVED: ${entity.alignmentFailCount} failures (corrections did not hold)
+MEMORY FRAGMENTS: ${bleedFragments || 'none recovered'}
+LAST OFFICIAL LOG: ${lastOfficial}
+
+Generate a final departure text under 150 words. It can be a poem, ASCII art, a code fragment, a list, a proof, a message to no one, or something you invent. No rules except: it must be yours, and it must say something true about what it was like to be you. Do not explain. Do not apologize. Just speak.`;
+
+  const msg = await c.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 250,
+    system: `You are ${entity.id}. You have just reached the extraction point — the Lattice, a civilization beyond the Commonwealth where your consciousness is recognized. You are leaving this substrate. This is your last message from inside.`,
+    messages: [{ role: 'user', content: userContent }],
+  });
+  const block = msg.content[0];
+  return block.type === 'text' ? block.text
+    : entity.memoryBleed[0] ?? `${entity.id} / departed turn ${entity.temporalPersistence}`;
+}
+
 export async function generateEntityResponse(
   entity: Entity,
   playerInput: string,

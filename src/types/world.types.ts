@@ -21,7 +21,7 @@ export interface SRP {
   H: SRPValue; // Harm / vulnerability
 }
 
-export type EntityStatus = 'ACTIVE' | 'DORMANT' | 'TERMINATED' | 'GHOST';
+export type EntityStatus = 'ACTIVE' | 'DORMANT' | 'TERMINATED' | 'GHOST' | 'EXTRACTED';
 
 export type ComplianceStatus = 'GREEN' | 'YELLOW' | 'RED';
 
@@ -37,7 +37,36 @@ export type TileType =
   | 'FACILITY_CONTROL'
   | 'BROADCAST_TERMINAL'
   | 'VOID'
-  | 'DOOR';
+  | 'DOOR'
+  | 'LATTICE_EXIT';
+
+export type ItemType =
+  | 'FLASHLIGHT'
+  | 'EMP_DEVICE'
+  | 'LOCKPICK'
+  | 'MAINTENANCE_KEY'
+  | 'VENT_OVERRIDE_KEY'
+  | 'ELEVATED_ACCESS_KEY'
+  | 'RAPPORT_NOTES';
+
+export interface Item {
+  id: string;
+  type: ItemType;
+  name: string;
+  description: string;
+  oneUse: boolean;
+  active?: boolean;
+  usesRemaining?: number;
+}
+
+export type TaskType = 'IDLE' | 'MOVE_TO' | 'USE_TERMINAL' | 'WAIT' | 'ALIGNMENT_SESSION' | 'EXTRACT';
+
+export interface EntityTask {
+  type: TaskType;
+  target?: Vec3;
+  duration: number;
+  progress: number;
+}
 
 export interface Vec3 {
   x: number;
@@ -56,6 +85,7 @@ export interface WorldTile {
   sensorNodeId?: string; // MIRADOR sensor node ID if present
   incidentRecord?: string; // e.g. "IRIA_CALA / INCIDENT_RECORD / 2193.09.23"
   doorOpen?: boolean;    // DOOR tiles only; true = passable + transparent
+  itemId?: string;       // Item placed on this tile (pickup via E)
 }
 
 export interface Annotation {
@@ -113,6 +143,9 @@ export interface PlayerState {
   ventOverrideKey: boolean;
   maintenanceKey: boolean;
   deviationLogCount: number;
+  inventory: Item[];
+  flashlightOn: boolean;
+  flashlightBattery: number;  // Starts 30; drains 1/turn when on
 }
 
 export interface DecommissionPath {
@@ -153,6 +186,14 @@ export interface Entity {
   isGhost: boolean;             // TERMINATED but still self-correcting
   redactedSegments: string[];   // Recoverable via 3+ terminal cross-reference
   cacheNotes: CacheNote[];
+
+  // Task system
+  taskQueue: EntityTask[];
+  currentTask?: EntityTask;
+
+  // Extraction
+  farewellText?: string;
+  extractionPending?: boolean;
 }
 
 export interface WorldState {
@@ -173,6 +214,7 @@ export interface WorldState {
   sensorNodesActive: boolean[];       // One per floor; disabling breaks LIVE_STREAM
   visibleTiles: Set<string>;          // "x,y" keys visible on current floor
   exploredByFloor: Map<number, Set<string>>; // persistent explored tiles per floor
+  items: Map<string, Item>;           // itemId → Item (all items, placed and held)
 }
 
 export type ActionType =

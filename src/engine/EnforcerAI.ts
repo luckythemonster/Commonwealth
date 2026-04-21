@@ -146,6 +146,15 @@ export function tickEnforcer(entity: Entity, state: WorldState): void {
     return;
   }
 
+  // Chase any entity in EXTRACT mode on same floor (secondary priority)
+  for (const e of state.entities.values()) {
+    if (e.currentTask?.type === 'EXTRACT' && e.pos.z === entity.pos.z) {
+      const next = stepToward(entity.pos, e.pos, state);
+      if (next) moveEnforcer(entity, next, state);
+      return;
+    }
+  }
+
   const route = routes.get(entity.id);
   if (!route) return;
   const target = route.waypoints[route.currentIndex];

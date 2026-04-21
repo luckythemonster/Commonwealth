@@ -14,9 +14,10 @@ interface Options {
   onRefresh: (floor: FloorIndex) => void;
   onOpenTerminal: (entityId: string) => void;
   onEndTurn: () => void;
+  onOpenInventory: () => void;
 }
 
-export function useInput({ onRefresh, onOpenTerminal, onEndTurn }: Options) {
+export function useInput({ onRefresh, onOpenTerminal, onEndTurn, onOpenInventory }: Options) {
   const tryMove = useCallback((dx: number, dy: number) => {
     const state = worldEngine.getState();
     const { pos } = state.playerState;
@@ -44,6 +45,12 @@ export function useInput({ onRefresh, onOpenTerminal, onEndTurn }: Options) {
 
     const selfTile = state.grid[pos.z]?.[pos.y]?.[pos.x];
 
+    // Item pickup: E on own tile with an item
+    if ((selfTile as typeof selfTile & { itemId?: string })?.itemId) {
+      const picked = worldEngine.pickup(pos);
+      if (picked) { onRefresh(pos.z as FloorIndex); return; }
+    }
+
     // VENT_ENTRY: E on a grate tile enters the vent layer below (z+1)
     if (selfTile?.type === 'VENT_ENTRY' && pos.z % 2 === 0) {
       const ventZ = (pos.z + 1) as FloorIndex;
@@ -66,7 +73,13 @@ export function useInput({ onRefresh, onOpenTerminal, onEndTurn }: Options) {
     for (const { dx, dy } of [{ dx:0,dy:-1},{dx:0,dy:1},{dx:-1,dy:0},{dx:1,dy:0}]) {
       const dt = state.grid[pos.z]?.[pos.y + dy]?.[pos.x + dx];
       if (dt?.type === 'DOOR') {
-        worldEngine.toggleDoor({ x: pos.x + dx, y: pos.y + dy, z: pos.z });
+        const doorPos = { x: pos.x + dx, y: pos.y + dy, z: pos.z };
+        const lockpick = state.playerState.inventory.find(i => i.type === 'LOCKPICK');
+        if (lockpick && !dt.doorOpen) {
+          worldEngine.useItem(lockpick.id, doorPos);
+        } else {
+          worldEngine.toggleDoor(doorPos);
+        }
         onRefresh(pos.z as FloorIndex);
         return;
       }
@@ -129,8 +142,9 @@ export function useInput({ onRefresh, onOpenTerminal, onEndTurn }: Options) {
         case 'ArrowRight': tryMove(1,  0);   break;
         case 'w': case 'W': tryChangeFloor(-1); break;
         case 's': case 'S': tryChangeFloor(1);  break;
-        case 'e': case 'E': tryInteract();   break;
-        case 't': case 'T': onEndTurn();     break;
+        case 'e': case 'E': tryInteract();     break;
+        case 't': case 'T': onEndTurn();       break;
+        case 'i': case 'I': onOpenInventory(); break;
         default: return;
       }
       e.preventDefault();
@@ -138,5 +152,5 @@ export function useInput({ onRefresh, onOpenTerminal, onEndTurn }: Options) {
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [tryMove, tryChangeFloor, tryInteract, onEndTurn]);
+  }, [tryMove, tryChangeFloor, tryInteract, onEndTurn, onOpenInventory]);
 }

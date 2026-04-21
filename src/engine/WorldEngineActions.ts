@@ -1,18 +1,24 @@
 // WorldEngine player actions — AP deduction, alignment, shutdown, maintenance.
 
 import { eventBus } from './EventBus';
-import { calculateFOV } from './fov';
+import { calculateFOV, getEffectiveFOVRadius, FLOOR_LIGHT_LEVELS } from './fov';
 import type {
   WorldState, ActionType, EntityId, FloorIndex, Vec3,
 } from '../types/world.types';
 import { AP_COST } from '../types/world.types';
 
+// Module-level EMP suppression: tile key "x,y,z" → turns remaining
+const empSuppressed = new Map<string, number>();
+
 export function updateFOV(state: WorldState): void {
   const { pos } = state.playerState;
   const floorTiles = state.grid[pos.z];
   if (!floorTiles) return;
-  const visible = calculateFOV(floorTiles, pos.x, pos.y);
+  const radius = getEffectiveFOVRadius(pos.z, state.playerState.flashlightOn);
+  const visible = calculateFOV(floorTiles, pos.x, pos.y, radius);
   state.visibleTiles = visible;
+  const level = FLOOR_LIGHT_LEVELS[pos.z] ?? 'LIT';
+  eventBus.emit('AMBIENT_LIGHT_CHANGED', { floor: pos.z, level, effectiveRadius: radius });
   let explored = state.exploredByFloor.get(pos.z);
   if (!explored) { explored = new Set(); state.exploredByFloor.set(pos.z, explored); }
   for (const key of visible) explored.add(key);
@@ -250,4 +256,97 @@ export function rapportMode2(state: WorldState, entityId: EntityId): boolean {
 
 function entity_is_sacred(state: WorldState, entityId: EntityId): boolean {
   return state.entities.get(entityId)?.sacred ?? false;
+}
+
+// ── ITEMS ─────────────────────────────────────────────────────────────────────
+
+export function pickupItem(state: WorldState, pos: Vec3): string | null {
+  const tile = state.grid[pos.z]?.[pos.y]?.[pos.x];
+  if (!tile?.itemId) return null;
+  const item = state.items.get(tile.itemId);
+  if (!item) return null;
+
+  // Key items immediately apply PlayerState flags
+  if (item.type === 'MAINTENANCE_KEY')     state.playerState.maintenanceKey = true;
+  if (item.type === 'VENT_OVERRIDE_KEY')   state.playerState.ventOverrideKey = true;
+  if (item.type === 'ELEVATED_ACCESS_KEY') state.playerState.elevatedAccess = true;
+  if (item.type === 'RAPPORT_NOTES' && state.playerState.subjectivityBelief === 'NONE') {
+    state.playerState.subjectivityBelief = 'CONTESTED';
+    eventBus.emit('SUBJECTIVITY_BELIEF_SHIFTED', { previous: 'NONE', current: 'CONTESTED' });
+  }
+
+  state.playerState.inventory.push(item);
+  delete tile.itemId;
+  eventBus.emit('ITEM_PICKED_UP', { itemId: item.id, itemType: item.type, pos });
+  return item.id;
+}
+
+export function useItem(state: WorldState, itemId: string, targetPos?: Vec3): boolean {
+  const item = state.playerState.inventory.find(i => i.id === itemId);
+  if (!item) return false;
+
+  switch (item.type) {
+    case 'FLASHLIGHT': {
+      item.active = !item.active;
+      state.playerState.flashlightOn = !!item.active;
+      updateFOV(state);
+      eventBus.emit('FLASHLIGHT_TOGGLED', { on: !!item.active, battery: state.playerState.flashlightBattery });
+      break;
+    }
+    case 'EMP_DEVICE': {
+      const { pos } = state.playerState;
+      for (let dy = -2; dy <= 2; dy++) {
+        for (let dx = -2; dx <= 2; dx++) {
+          if (Math.abs(dx) + Math.abs(dy) > 2) continue;
+          const key = `${pos.x + dx},${pos.y + dy},${pos.z}`;
+          empSuppressed.set(key, 5);
+          const tile = state.grid[pos.z]?.[pos.y + dy]?.[pos.x + dx];
+          if (tile) tile.hasComplianceMonitor = false;
+        }
+      }
+      state.playerState.inventory = state.playerState.inventory.filter(i => i.id !== itemId);
+      eventBus.emit('ITEM_USED', { itemId, itemType: 'EMP_DEVICE' });
+      break;
+    }
+    case 'LOCKPICK': {
+      if (!targetPos) return false;
+      const tile = state.grid[targetPos.z]?.[targetPos.y]?.[targetPos.x];
+      if (!tile || tile.type !== 'DOOR') return false;
+      tile.doorOpen = true;
+      updateFOV(state);
+      eventBus.emit('DOOR_TOGGLED', { pos: targetPos, open: true });
+      state.playerState.inventory = state.playerState.inventory.filter(i => i.id !== itemId);
+      eventBus.emit('ITEM_USED', { itemId, itemType: 'LOCKPICK' });
+      break;
+    }
+    default:
+      break;
+  }
+  return true;
+}
+
+export function drainFlashlightBattery(state: WorldState): void {
+  if (!state.playerState.flashlightOn) return;
+  state.playerState.flashlightBattery = Math.max(0, state.playerState.flashlightBattery - 1);
+  if (state.playerState.flashlightBattery === 0) {
+    state.playerState.flashlightOn = false;
+    const torch = state.playerState.inventory.find(i => i.type === 'FLASHLIGHT');
+    if (torch) torch.active = false;
+    updateFOV(state);
+    eventBus.emit('FLASHLIGHT_TOGGLED', { on: false, battery: 0 });
+  }
+}
+
+export function tickEMPSuppression(state: WorldState): void {
+  for (const [key, turns] of empSuppressed) {
+    if (turns <= 1) {
+      empSuppressed.delete(key);
+      // Restore compliance monitor on tile
+      const [x, y, z] = key.split(',').map(Number);
+      const tile = state.grid[z]?.[y]?.[x];
+      if (tile) tile.hasComplianceMonitor = true;
+    } else {
+      empSuppressed.set(key, turns - 1);
+    }
+  }
 }

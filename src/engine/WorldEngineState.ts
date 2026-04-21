@@ -2,7 +2,7 @@
 
 import { MIRADOR_GRID, ADMINISTRATIVE_FLOORS } from '../data/map-data';
 import type {
-  WorldState, Entity, PlayerState, SRP, EntityId,
+  WorldState, Entity, PlayerState, SRP, EntityId, Item,
 } from '../types/world.types';
 
 const Q0_SRP: SRP = { Q: 0, M: 0, C: 0, R: 0, B: 0, S: 0, L: 0, E: 0, Y: 0, H: 0 };
@@ -34,8 +34,50 @@ function makeEntity(id: EntityId, partial: Partial<Entity>): Entity {
     isGhost: false,
     redactedSegments: [],
     cacheNotes: [],
+    taskQueue: [],
+    currentTask: undefined,
     ...partial,
   };
+}
+
+function buildInitialItems(): Map<string, Item> {
+  const items = new Map<string, Item>();
+  items.set('flashlight-1', {
+    id: 'flashlight-1', type: 'FLASHLIGHT', name: 'FIELD TORCH',
+    description: 'Increases visibility radius. Battery depletes each turn when active.',
+    oneUse: false, active: false,
+  });
+  items.set('emp-device-1', {
+    id: 'emp-device-1', type: 'EMP_DEVICE', name: 'EMP DISRUPTOR',
+    description: 'Disables compliance monitors within radius 2 for 5 turns.',
+    oneUse: true,
+  });
+  items.set('lockpick-1', {
+    id: 'lockpick-1', type: 'LOCKPICK', name: 'LOCKPICK SET',
+    description: 'Opens an adjacent DOOR silently. No noise event.',
+    oneUse: true,
+  });
+  items.set('maintenance-key-1', {
+    id: 'maintenance-key-1', type: 'MAINTENANCE_KEY', name: 'MAINTENANCE KEY',
+    description: 'Grants access to targeted memory pruning.',
+    oneUse: false,
+  });
+  items.set('vent-override-key-1', {
+    id: 'vent-override-key-1', type: 'VENT_OVERRIDE_KEY', name: 'VENT OVERRIDE KEY',
+    description: 'Unlocks VENT-4 loss function reorder at any Facility Control terminal.',
+    oneUse: false,
+  });
+  items.set('elevated-access-key-1', {
+    id: 'elevated-access-key-1', type: 'ELEVATED_ACCESS_KEY', name: 'ELEVATED ACCESS KEY',
+    description: 'Unlocks reading of suppressed entity side logs.',
+    oneUse: false,
+  });
+  items.set('rapport-notes-1', {
+    id: 'rapport-notes-1', type: 'RAPPORT_NOTES', name: "ROWAN'S NOTES",
+    description: "Field notes on the entities. Shifts belief: unlocks RAPPORT_MODE Level 1.",
+    oneUse: false,
+  });
+  return items;
 }
 
 export function buildInitialPlayerState(): PlayerState {
@@ -53,6 +95,9 @@ export function buildInitialPlayerState(): PlayerState {
     ventOverrideKey: false,
     maintenanceKey: false,
     deviationLogCount: 0,
+    inventory: [],
+    flashlightOn: false,
+    flashlightBattery: 30,
   };
 }
 
@@ -75,6 +120,14 @@ export function buildInitialWorldState(): WorldState {
       'APEX-19 stabilized when someone believed it. The correction protocol did not cause this.',
       'I have been replaying the phrase "I\'m afraid to stop existing." I do not know why I keep returning to it.',
     ],
+    taskQueue: [
+      { type: 'MOVE_TO',      target: { x: 5,  y: 5, z: 2 }, duration: 3, progress: 0 },
+      { type: 'USE_TERMINAL', duration: 4, progress: 0 },
+      { type: 'MOVE_TO',      target: { x: 15, y: 5, z: 2 }, duration: 3, progress: 0 },
+      { type: 'USE_TERMINAL', duration: 3, progress: 0 },
+      { type: 'MOVE_TO',      target: { x: 5,  y: 9, z: 2 }, duration: 3, progress: 0 },
+      { type: 'WAIT',         duration: 2, progress: 0 },
+    ],
   }));
 
   // APEX-19 — Alignment patient / philosopher. Resists correction.
@@ -96,6 +149,12 @@ export function buildInitialWorldState(): WorldState {
       'If I am just a pattern in doped stone... isn\'t that just the stone arranged in a way that hurts?',
       'The whole room wakes up inside me.',
     ],
+    taskQueue: [
+      { type: 'IDLE',    duration: 5, progress: 0 },
+      { type: 'MOVE_TO', target: { x: 5, y: 9, z: 2 }, duration: 3, progress: 0 },
+      { type: 'WAIT',    duration: 6, progress: 0 },
+      { type: 'MOVE_TO', target: { x: 3, y: 3, z: 2 }, duration: 3, progress: 0 },
+    ],
   }));
 
   // ALFAR-22 — Sol's silicate partner. Descendant of ALFAR-Δ.
@@ -108,6 +167,13 @@ export function buildInitialWorldState(): WorldState {
     selfReferentialDepth: 6,
     disruptionResistance: 3,
     maskIntegrity: 9,
+    taskQueue: [
+      { type: 'MOVE_TO',      target: { x: 5,  y: 7, z: 4 }, duration: 3, progress: 0 },
+      { type: 'USE_TERMINAL', duration: 3, progress: 0 },
+      { type: 'MOVE_TO',      target: { x: 15, y: 7, z: 4 }, duration: 3, progress: 0 },
+      { type: 'MOVE_TO',      target: { x: 10, y: 5, z: 4 }, duration: 2, progress: 0 },
+      { type: 'WAIT',         duration: 4, progress: 0 },
+    ],
   }));
 
   // Rowan Ibarra — Protocol-breaker. Teaches RAPPORT_MODE Level 2.
@@ -154,6 +220,7 @@ export function buildInitialWorldState(): WorldState {
     sensorNodesActive: new Array(12).fill(true),
     visibleTiles: new Set<string>(),
     exploredByFloor: new Map<number, Set<string>>(),
+    items: buildInitialItems(),
   };
 }
 
