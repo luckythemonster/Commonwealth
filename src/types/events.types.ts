@@ -2,7 +2,7 @@
 // All React <-> Phaser communication passes through these typed events.
 // STRICT DIRECTIVE: Do NOT remove or refactor the EventBus.
 
-import type { EntityId, FloorIndex, PersonaMode, Vec3 } from './world.types';
+import type { EntityId, FloorIndex, ItemType, PersonaMode, TaskType, Vec3, ViolationType } from './world.types';
 
 export interface EventMap {
   // --- WORLD STATE ---
@@ -89,8 +89,44 @@ export interface EventMap {
   NOISE_EVENT: { origin: Vec3; intensity: number; sourceEntityId?: EntityId };
   ENFORCER_ALERTED: { enforcerId: EntityId; origin: Vec3 };
 
+  // --- PLAYER DETECTION (previously emitted but undeclared) ---
+  FOV_UPDATED: { floor: FloorIndex; visibleTiles: string[] };
+  DOOR_TOGGLED: { pos: Vec3; open: boolean };
+  PLAYER_DETECTED: { enforcerId: EntityId; pos: Vec3 };
+  PLAYER_DETAINED: { enforcerId: EntityId; turn: number };
+  PLAYER_DETECTION_CLEARED: Record<string, never>;
+
+  // --- LIGHT / DARKNESS ---
+  AMBIENT_LIGHT_CHANGED: { floor: FloorIndex; level: 'LIT' | 'DIM' | 'DARK'; effectiveRadius: number };
+
+  // --- ITEMS ---
+  ITEM_PICKED_UP: { itemId: string; itemType: ItemType; pos: Vec3 };
+  ITEM_USED: { itemId: string; itemType: ItemType; entityId?: EntityId };
+  FLASHLIGHT_TOGGLED: { on: boolean; battery: number };
+
+  // --- SILICATE TASKS ---
+  ENTITY_TASK_CHANGED: { entityId: EntityId; taskType: TaskType };
+
+  // --- EXTRACTION ---
+  EXTRACTION_TRIGGERED: { entityId: EntityId; pos: Vec3; turn: number };
+  ENTITY_EXTRACTED: { entityId: EntityId; farewellText: string; turn: number };
+
   // --- LATTICE MIGRATION ---
   LATTICE_MIGRATION: { npcId: EntityId; turn: number };
+
+  // --- LIGHT SOURCES ---
+  LIGHT_SOURCE_TOGGLED: { pos: Vec3; on: boolean; floor: FloorIndex };
+
+  // --- VIOLATIONS ---
+  VIOLATION_LOGGED: { type: ViolationType; turn: number };
+  VIOLATION_EXPIRED: { type: ViolationType; turn: number };
+
+  // --- ELEVATOR ---
+  ELEVATOR_ACCESS_DENIED: { targetFloor: FloorIndex; requiredKey: ItemType };
+  ELEVATOR_USED: { fromFloor: FloorIndex; toFloor: FloorIndex };
+
+  // --- DOORS ---
+  DOOR_LOCKED_BLOCKED: { pos: Vec3 };
 }
 
 export type EventName = keyof EventMap;

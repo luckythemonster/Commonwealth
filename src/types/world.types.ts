@@ -21,7 +21,7 @@ export interface SRP {
   H: SRPValue; // Harm / vulnerability
 }
 
-export type EntityStatus = 'ACTIVE' | 'DORMANT' | 'TERMINATED' | 'GHOST';
+export type EntityStatus = 'ACTIVE' | 'DORMANT' | 'TERMINATED' | 'GHOST' | 'EXTRACTED';
 
 export type ComplianceStatus = 'GREEN' | 'YELLOW' | 'RED';
 
@@ -32,12 +32,48 @@ export type TileType =
   | 'WALL'
   | 'VENT_ENTRY'
   | 'VENT_PASSAGE'
+  | 'VENT_EXIT_DOWN'
   | 'TERMINAL'
   | 'STAIRWELL'
   | 'FACILITY_CONTROL'
   | 'BROADCAST_TERMINAL'
   | 'VOID'
-  | 'DOOR';
+  | 'DOOR'
+  | 'LATTICE_EXIT'
+  | 'LIGHT_SOURCE'
+  | 'ELEVATOR';
+
+export type ItemType =
+  | 'FLASHLIGHT'
+  | 'EMP_DEVICE'
+  | 'LOCKPICK'
+  | 'MAINTENANCE_KEY'
+  | 'VENT_OVERRIDE_KEY'
+  | 'ELEVATED_ACCESS_KEY'
+  | 'RAPPORT_NOTES'
+  | 'ELEVATOR_KEY_ADMIN'
+  | 'ELEVATOR_KEY_ARCHIVE'
+  | 'ELEVATOR_KEY_OPS';
+
+export interface Item {
+  id: string;
+  type: ItemType;
+  name: string;
+  description: string;
+  oneUse: boolean;
+  active?: boolean;
+  usesRemaining?: number;
+}
+
+export type TaskType = 'IDLE' | 'MOVE_TO' | 'USE_TERMINAL' | 'WAIT' | 'ALIGNMENT_SESSION' | 'EXTRACT' | 'STAIRWELL_TRAVERSE';
+
+export interface EntityTask {
+  type: TaskType;
+  target?: Vec3;
+  targetFloor?: FloorIndex;  // used by STAIRWELL_TRAVERSE
+  duration: number;
+  progress: number;
+}
 
 export interface Vec3 {
   x: number;
@@ -56,6 +92,9 @@ export interface WorldTile {
   sensorNodeId?: string; // MIRADOR sensor node ID if present
   incidentRecord?: string; // e.g. "IRIA_CALA / INCIDENT_RECORD / 2193.09.23"
   doorOpen?: boolean;    // DOOR tiles only; true = passable + transparent
+  locked?: boolean;      // DOOR tiles only; requires key or LOCKPICK to open
+  itemId?: string;       // Item placed on this tile (pickup via E)
+  lightSourceOn?: boolean; // LIGHT_SOURCE tiles only; true = illuminated (default)
 }
 
 export interface Annotation {
@@ -97,6 +136,23 @@ export interface ViolationEntry {
   type: 'ARTICLE_ZERO_VIOLATION' | 'Q0_DOCTRINE_VIOLATION' | 'PROTOCOL_VIOLATION';
 }
 
+export type ViolationType =
+  | 'SILICATE_INTERACTION'
+  | 'UNAUTHORIZED_TERMINAL'
+  | 'VENT4_TAMPERING'
+  | 'RESTRICTED_ZONE'
+  | 'LOCKPICK_USE'
+  | 'ITEM_THEFT';
+
+export interface PlayerViolation {
+  id: string;
+  type: ViolationType;
+  turn: number;
+  pos: Vec3;
+  floor: FloorIndex;
+  expiresAtTurn: number;
+}
+
 export type SubjectivityBelief = 'NONE' | 'CONTESTED' | 'SHAKEN' | 'AFFIRMED';
 
 export interface PlayerState {
@@ -113,6 +169,9 @@ export interface PlayerState {
   ventOverrideKey: boolean;
   maintenanceKey: boolean;
   deviationLogCount: number;
+  inventory: Item[];
+  flashlightOn: boolean;
+  flashlightBattery: number;  // Starts 30; drains 1/turn when on
 }
 
 export interface DecommissionPath {
@@ -153,6 +212,14 @@ export interface Entity {
   isGhost: boolean;             // TERMINATED but still self-correcting
   redactedSegments: string[];   // Recoverable via 3+ terminal cross-reference
   cacheNotes: CacheNote[];
+
+  // Task system
+  taskQueue: EntityTask[];
+  currentTask?: EntityTask;
+
+  // Extraction
+  farewellText?: string;
+  extractionPending?: boolean;
 }
 
 export interface WorldState {
@@ -173,6 +240,8 @@ export interface WorldState {
   sensorNodesActive: boolean[];       // One per floor; disabling breaks LIVE_STREAM
   visibleTiles: Set<string>;          // "x,y" keys visible on current floor
   exploredByFloor: Map<number, Set<string>>; // persistent explored tiles per floor
+  items: Map<string, Item>;           // itemId → Item (all items, placed and held)
+  playerViolations: PlayerViolation[];
 }
 
 export type ActionType =

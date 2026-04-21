@@ -21,9 +21,13 @@ const TILE_SPRITE_FRAMES: Record<string, number | null> = {
   BROADCAST_TERMINAL: 152,  // row 9 col 8  — drawn under purple overlay
   STAIRWELL:          160,  // row 10 col 0 — drawn under olive overlay
   FACILITY_CONTROL:   176,  // row 11 col 0 — drawn under dark-purple overlay
+  LATTICE_EXIT:       160,  // reuse stairwell frame — bright teal overlay distinguishes
   DOOR:               null, // color-only; open/closed determines tint
   WALL:               null, // solid dark fill only — no sprite
   VOID:               null, // dark canvas background only
+  LIGHT_SOURCE:       208,  // row 13 col 0 — warm/dark overlay distinguishes on/off
+  VENT_EXIT_DOWN:     188,  // same frame as VENT_ENTRY; orange overlay distinguishes
+  ELEVATOR:           160,  // same frame as STAIRWELL; blue overlay distinguishes
 };
 
 // Color fills drawn over (or instead of) sprites for tile-type legibility.
@@ -38,6 +42,10 @@ const TILE_OVERLAYS: Record<string, { color: number; alpha: number } | null> = {
   STAIRWELL:          { color: 0x5c5010, alpha: 0.75 },
   FACILITY_CONTROL:   { color: 0x2a0a4a, alpha: 0.85 },
   DOOR:               null, // rendered dynamically based on doorOpen state
+  LATTICE_EXIT:       { color: 0x00ffcc, alpha: 0.6  },
+  LIGHT_SOURCE:       { color: 0xffdd88, alpha: 0.6  },
+  VENT_EXIT_DOWN:     { color: 0x7a3800, alpha: 0.75 },
+  ELEVATOR:           { color: 0x004488, alpha: 0.75 },
 };
 
 const APM_OVERLAY   = 0x001a2a;
@@ -58,6 +66,7 @@ export class GameScene extends Phaser.Scene {
   private glitchFrame   = false;
   private visibleTiles  = new Set<string>();
   private exploredByFloor = new Map<number, Set<string>>();
+  private ambientLight: 'LIT' | 'DIM' | 'DARK' = 'LIT';
   private unsubs: Array<() => void> = [];
 
   constructor() { super({ key: 'GameScene' }); }
@@ -130,6 +139,25 @@ export class GameScene extends Phaser.Scene {
       }),
       eventBus.on('NOISE_EVENT', ({ origin, intensity }) => {
         if (origin.z === this.currentFloor) this.pulseNoise(origin.x, origin.y, intensity);
+      }),
+      eventBus.on('AMBIENT_LIGHT_CHANGED', ({ floor, level }) => {
+        if (floor !== this.currentFloor) return;
+        this.ambientLight = level as 'LIT' | 'DIM' | 'DARK';
+        this.renderOverlay();
+      }),
+      eventBus.on('FLASHLIGHT_TOGGLED', () => { this.renderOverlay(); }),
+      eventBus.on('EXTRACTION_TRIGGERED', () => { this.renderTiles(); }),
+      eventBus.on('LIGHT_SOURCE_TOGGLED', ({ floor }) => {
+        if ((floor as number) === this.currentFloor) { this.renderTiles(); this.renderOverlay(); }
+      }),
+      eventBus.on('VIOLATION_LOGGED', () => {
+        this.overlayGraphics.fillStyle(0xaa0000, 0.3);
+        this.overlayGraphics.fillRect(0, 0, this.scale.width, this.scale.height);
+        this.time.delayedCall(120, () => this.renderOverlay());
+      }),
+      eventBus.on('DOOR_LOCKED_BLOCKED', ({ pos }) => {
+        const p = pos as { x: number; y: number; z: number };
+        if (p.z === this.currentFloor) this.flashTile(p.x, p.y, 0xcc2222, 0.6);
       }),
     );
   }
@@ -213,6 +241,64 @@ export class GameScene extends Phaser.Scene {
           g.strokeRect(x * TILE_SIZE + 2, y * TILE_SIZE + 2, TILE_SIZE - 4, TILE_SIZE - 4);
         }
 
+        // LATTICE_EXIT — pulsing teal border
+        if (tile.type === 'LATTICE_EXIT') {
+          const pulse = 0.4 + 0.4 * Math.sin(this.time.now / 400);
+          g.lineStyle(2, 0x00ffcc, pulse);
+          g.strokeRect(x * TILE_SIZE + 1, y * TILE_SIZE + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+        }
+
+        // LIGHT_SOURCE: override overlay with dark grey when switched off
+        if (tile.type === 'LIGHT_SOURCE') {
+          if (tile.lightSourceOn === false) {
+            g.fillStyle(0x1a1a1a, 0.85);
+            g.fillRect(x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+          } else {
+            g.lineStyle(2, 0xffeeaa, 0.8);
+            g.strokeRect(x * TILE_SIZE + 4, y * TILE_SIZE + 4, TILE_SIZE - 8, TILE_SIZE - 8);
+          }
+        }
+
+        // VENT_EXIT_DOWN: orange border + down-arrow
+        if (tile.type === 'VENT_EXIT_DOWN') {
+          const cx = x * TILE_SIZE + TILE_SIZE / 2;
+          const cy = y * TILE_SIZE + TILE_SIZE / 2;
+          g.lineStyle(2, 0xcc6600, 0.85);
+          g.strokeRect(x * TILE_SIZE + 2, y * TILE_SIZE + 2, TILE_SIZE - 4, TILE_SIZE - 4);
+          g.lineBetween(cx, cy - 4, cx, cy + 4);
+          g.lineBetween(cx - 3, cy + 1, cx, cy + 4);
+          g.lineBetween(cx + 3, cy + 1, cx, cy + 4);
+        }
+
+        // ELEVATOR: blue border + up-arrow
+        if (tile.type === 'ELEVATOR') {
+          const cx = x * TILE_SIZE + TILE_SIZE / 2;
+          const cy = y * TILE_SIZE + TILE_SIZE / 2;
+          g.lineStyle(2, 0x4488cc, 0.9);
+          g.strokeRect(x * TILE_SIZE + 2, y * TILE_SIZE + 2, TILE_SIZE - 4, TILE_SIZE - 4);
+          g.lineBetween(cx, cy + 4, cx, cy - 4);
+          g.lineBetween(cx - 3, cy - 1, cx, cy - 4);
+          g.lineBetween(cx + 3, cy - 1, cx, cy - 4);
+        }
+
+        // Locked door: small red diamond indicator
+        if (tile.type === 'DOOR' && tile.locked && !tile.doorOpen) {
+          const cx = x * TILE_SIZE + TILE_SIZE / 2;
+          const cy = y * TILE_SIZE + TILE_SIZE / 2;
+          g.fillStyle(0xcc2222, 0.85);
+          g.fillTriangle(cx, cy - 4, cx + 4, cy, cx, cy + 4);
+          g.fillTriangle(cx, cy - 4, cx - 4, cy, cx, cy + 4);
+        }
+
+        // Item pickup — gold diamond indicator
+        if ((tile as WorldTile & { itemId?: string }).itemId) {
+          const cx = x * TILE_SIZE + TILE_SIZE / 2;
+          const cy = y * TILE_SIZE + TILE_SIZE / 2;
+          g.fillStyle(0xffdd44, 0.9);
+          g.fillTriangle(cx, cy - 5, cx + 4, cy, cx - 4, cy);
+          g.fillTriangle(cx, cy + 5, cx + 4, cy, cx - 4, cy);
+        }
+
         // Low-oxygen strip at tile bottom
         if (tile.oxygenLevel < 50) {
           const alpha = (1 - tile.oxygenLevel / 50) * 0.5;
@@ -285,6 +371,15 @@ export class GameScene extends Phaser.Scene {
           }
         }
       }
+    }
+
+    // Ambient light overlay — applied last so it dims everything including entities
+    if (this.ambientLight === 'DIM') {
+      g.fillStyle(0x0a1020, 0.45);
+      g.fillRect(0, 0, this.scale.width, this.scale.height);
+    } else if (this.ambientLight === 'DARK') {
+      g.fillStyle(0x040810, 0.72);
+      g.fillRect(0, 0, this.scale.width, this.scale.height);
     }
   }
 
