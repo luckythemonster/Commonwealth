@@ -2,7 +2,7 @@
 // All React <-> Phaser communication passes through these typed events.
 // STRICT DIRECTIVE: Do NOT remove or refactor the EventBus.
 
-import type { EntityId, FloorIndex, ItemType, PersonaMode, TaskType, Vec3 } from './world.types';
+import type { EntityId, FloorIndex, ItemType, PersonaMode, TaskType, Vec3, ViolationType } from './world.types';
 
 export interface EventMap {
   // --- WORLD STATE ---
@@ -113,6 +113,20 @@ export interface EventMap {
 
   // --- LATTICE MIGRATION ---
   LATTICE_MIGRATION: { npcId: EntityId; turn: number };
+
+  // --- LIGHT SOURCES ---
+  LIGHT_SOURCE_TOGGLED: { pos: Vec3; on: boolean; floor: FloorIndex };
+
+  // --- VIOLATIONS ---
+  VIOLATION_LOGGED: { type: ViolationType; turn: number };
+  VIOLATION_EXPIRED: { type: ViolationType; turn: number };
+
+  // --- ELEVATOR ---
+  ELEVATOR_ACCESS_DENIED: { targetFloor: FloorIndex; requiredKey: ItemType };
+  ELEVATOR_USED: { fromFloor: FloorIndex; toFloor: FloorIndex };
+
+  // --- DOORS ---
+  DOOR_LOCKED_BLOCKED: { pos: Vec3 };
 }
 
 export type EventName = keyof EventMap;

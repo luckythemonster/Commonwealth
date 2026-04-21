@@ -3,18 +3,96 @@
 import { eventBus } from './EventBus';
 import { calculateFOV, getEffectiveFOVRadius, FLOOR_LIGHT_LEVELS } from './fov';
 import type {
-  WorldState, ActionType, EntityId, FloorIndex, Vec3,
+  WorldState, ActionType, EntityId, FloorIndex, Vec3, ViolationType, ItemType,
 } from '../types/world.types';
 import { AP_COST } from '../types/world.types';
 
+const VIOLATION_EXPIRY_TURNS = 20;
+const RESTRICTED_FLOORS = [0, 8, 10];
+const ALIGNMENT_FLOORS = [2, 3];
+const ELEVATOR_KEY_MAP: Partial<Record<number, ItemType>> = {
+  0:  'ELEVATOR_KEY_ADMIN',
+  8:  'ELEVATOR_KEY_ARCHIVE',
+  10: 'ELEVATOR_KEY_OPS',
+};
+const ELEVATOR_X = 18;
+const ELEVATOR_Y = 7;
+
+// BFS single-step pathfinder — exported so EnforcerAI can use it.
+// Returns the first step from `from` toward `to` on the same z-level, or null if already there.
+export function bfsStep(
+  from: Vec3,
+  to: Vec3,
+  state: WorldState,
+  canPassDoors: boolean,
+): Vec3 | null {
+  if (from.x === to.x && from.y === to.y) return null;
+  const floorTiles = state.grid[from.z];
+  if (!floorTiles) return null;
+  const height = floorTiles.length;
+  const width  = floorTiles[0]?.length ?? 0;
+  const queue: Array<{ x: number; y: number; parent: string | null }> = [
+    { x: from.x, y: from.y, parent: null },
+  ];
+  const visited = new Set<string>();
+  const parentOf = new Map<string, string | null>();
+  const key = (x: number, y: number) => `${x},${y}`;
+  visited.add(key(from.x, from.y));
+  parentOf.set(key(from.x, from.y), null);
+
+  while (queue.length > 0) {
+    const cur = queue.shift()!;
+    for (const [dx, dy] of [[0,-1],[0,1],[-1,0],[1,0]]) {
+      const nx = cur.x + dx;
+      const ny = cur.y + dy;
+      if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+      const nk = key(nx, ny);
+      if (visited.has(nk)) continue;
+      const tile = floorTiles[ny]?.[nx];
+      if (!tile) continue;
+      if (tile.type === 'WALL' || tile.type === 'VOID') continue;
+      if (tile.type === 'DOOR' && !canPassDoors && !tile.doorOpen) continue;
+      visited.add(nk);
+      parentOf.set(nk, key(cur.x, cur.y));
+      if (nx === to.x && ny === to.y) {
+        // Reconstruct path back to first step
+        let step = nk;
+        let prev = parentOf.get(step);
+        while (prev && prev !== key(from.x, from.y)) {
+          step = prev;
+          prev = parentOf.get(step);
+        }
+        const [sx, sy] = step.split(',').map(Number);
+        return { x: sx, y: sy, z: from.z };
+      }
+      queue.push({ x: nx, y: ny, parent: key(cur.x, cur.y) });
+    }
+  }
+  return null;
+}
+
 // Module-level EMP suppression: tile key "x,y,z" → turns remaining
 const empSuppressed = new Map<string, number>();
+
+function isPlayerInDarkZone(state: WorldState): boolean {
+  const { pos } = state.playerState;
+  if ((FLOOR_LIGHT_LEVELS[pos.z] ?? 'LIT') !== 'LIT') return false;
+  const floor = state.grid[pos.z];
+  for (let dy = -4; dy <= 4; dy++) {
+    for (let dx = -4; dx <= 4; dx++) {
+      const t = floor?.[pos.y + dy]?.[pos.x + dx];
+      if (t?.type === 'LIGHT_SOURCE' && t.lightSourceOn !== false) return false;
+    }
+  }
+  return true;
+}
 
 export function updateFOV(state: WorldState): void {
   const { pos } = state.playerState;
   const floorTiles = state.grid[pos.z];
   if (!floorTiles) return;
-  const radius = getEffectiveFOVRadius(pos.z, state.playerState.flashlightOn);
+  const darkZone = isPlayerInDarkZone(state);
+  const radius = getEffectiveFOVRadius(pos.z, state.playerState.flashlightOn, darkZone);
   const visible = calculateFOV(floorTiles, pos.x, pos.y, radius);
   state.visibleTiles = visible;
   const level = FLOOR_LIGHT_LEVELS[pos.z] ?? 'LIT';
@@ -72,9 +150,77 @@ export function ventTraverse(state: WorldState, to: Vec3): boolean {
 export function toggleDoor(state: WorldState, pos: Vec3): boolean {
   const tile = state.grid[pos.z]?.[pos.y]?.[pos.x];
   if (!tile || tile.type !== 'DOOR') return false;
+  if (tile.locked && !tile.doorOpen) return false;  // locked — requires key/lockpick
   tile.doorOpen = !tile.doorOpen;
   updateFOV(state);
   eventBus.emit('DOOR_TOGGLED', { pos, open: tile.doorOpen });
+  return true;
+}
+
+export function unlockDoorWithKey(state: WorldState, pos: Vec3): boolean {
+  const tile = state.grid[pos.z]?.[pos.y]?.[pos.x];
+  if (!tile || tile.type !== 'DOOR' || !tile.locked || tile.doorOpen) return false;
+  const requiredKey = ELEVATOR_KEY_MAP[pos.z];
+  if (!requiredKey) return false;
+  const hasKey = state.playerState.inventory.some(i => i.type === requiredKey);
+  if (!hasKey) return false;
+  tile.locked = false;
+  tile.doorOpen = true;
+  updateFOV(state);
+  eventBus.emit('DOOR_TOGGLED', { pos, open: true });
+  return true;
+}
+
+export function toggleLightSource(state: WorldState, pos: Vec3): boolean {
+  const tile = state.grid[pos.z]?.[pos.y]?.[pos.x];
+  if (!tile || tile.type !== 'LIGHT_SOURCE') return false;
+  if (!deductAP(state, 'INTERACT')) return false;
+  tile.lightSourceOn = tile.lightSourceOn === false ? true : false;
+  eventBus.emit('LIGHT_SOURCE_TOGGLED', { pos, on: tile.lightSourceOn !== false, floor: pos.z as FloorIndex });
+  updateFOV(state);
+  return true;
+}
+
+export function logPlayerViolation(state: WorldState, type: ViolationType, pos: Vec3): void {
+  const v = {
+    id: `pv-${state.turnCount}-${type}`,
+    type,
+    turn: state.turnCount,
+    pos,
+    floor: pos.z as FloorIndex,
+    expiresAtTurn: state.turnCount + VIOLATION_EXPIRY_TURNS,
+  };
+  state.playerViolations.push(v);
+  eventBus.emit('VIOLATION_LOGGED', { type, turn: state.turnCount });
+  // Alert nearby enforcers
+  for (const entity of state.entities.values()) {
+    if (!entity.id.startsWith('ENFORCER')) continue;
+    if (entity.pos.z !== pos.z) continue;
+    const dist = Math.abs(entity.pos.x - pos.x) + Math.abs(entity.pos.y - pos.y);
+    if (dist <= 8) {
+      eventBus.emit('ENFORCER_ALERTED', { enforcerId: entity.id, origin: pos });
+    }
+  }
+}
+
+export function useElevator(state: WorldState, targetFloor: FloorIndex): boolean {
+  const { pos } = state.playerState;
+  const selfTile = state.grid[pos.z]?.[pos.y]?.[pos.x];
+  if (selfTile?.type !== 'ELEVATOR') return false;
+  const requiredKey = ELEVATOR_KEY_MAP[targetFloor];
+  if (requiredKey) {
+    const hasKey = state.playerState.inventory.some(i => i.type === requiredKey);
+    if (!hasKey) {
+      eventBus.emit('ELEVATOR_ACCESS_DENIED', { targetFloor, requiredKey });
+      return false;
+    }
+  }
+  if (!deductAP(state, 'INTERACT')) return false;
+  const from = { ...pos };
+  state.playerState.pos = { x: ELEVATOR_X, y: ELEVATOR_Y, z: targetFloor };
+  updateFOV(state);
+  eventBus.emit('ELEVATOR_USED', { fromFloor: from.z, toFloor: targetFloor });
+  eventBus.emit('PLAYER_MOVED', { from, to: state.playerState.pos });
   return true;
 }
 
@@ -278,6 +424,9 @@ export function pickupItem(state: WorldState, pos: Vec3): string | null {
   state.playerState.inventory.push(item);
   delete tile.itemId;
   eventBus.emit('ITEM_PICKED_UP', { itemId: item.id, itemType: item.type, pos });
+  if (RESTRICTED_FLOORS.includes(pos.z)) {
+    logPlayerViolation(state, 'ITEM_THEFT', pos);
+  }
   return item.id;
 }
 
@@ -313,8 +462,12 @@ export function useItem(state: WorldState, itemId: string, targetPos?: Vec3): bo
       const tile = state.grid[targetPos.z]?.[targetPos.y]?.[targetPos.x];
       if (!tile || tile.type !== 'DOOR') return false;
       tile.doorOpen = true;
+      tile.locked = false;
       updateFOV(state);
       eventBus.emit('DOOR_TOGGLED', { pos: targetPos, open: true });
+      if (RESTRICTED_FLOORS.includes(targetPos.z)) {
+        logPlayerViolation(state, 'LOCKPICK_USE', targetPos);
+      }
       state.playerState.inventory = state.playerState.inventory.filter(i => i.id !== itemId);
       eventBus.emit('ITEM_USED', { itemId, itemType: 'LOCKPICK' });
       break;

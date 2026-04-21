@@ -6,7 +6,7 @@ import { GameScene } from './phaser/GameScene';
 import { InterrogationTerminal } from './components/InterrogationTerminal';
 import { VentilationReport } from './components/VentilationReport';
 import { useInput } from './hooks/useInput';
-import type { SubjectivityBelief, FloorIndex, WorldState, Item } from './types/world.types';
+import type { SubjectivityBelief, FloorIndex, WorldState, Item, ItemType } from './types/world.types';
 
 const CANVAS_W = 640;
 const CANVAS_H = 448;
@@ -46,6 +46,8 @@ export default function App() {
   const [showInventory, setShowInventory] = useState(false);
   const [ambientLevel, setAmbientLevel] = useState<'LIT' | 'DIM' | 'DARK'>('LIT');
   const [farewellModal, setFarewellModal] = useState<{ entityId: string; text: string; turn: number } | null>(null);
+  const [hudAlert, setHudAlert]           = useState<{ msg: string; color: string } | null>(null);
+  const [showElevator, setShowElevator]   = useState(false);
 
   const refreshFloor = useCallback((z: FloorIndex, scene?: GameScene) => {
     const s = scene ?? sceneRef.current;
@@ -105,9 +107,18 @@ export default function App() {
       }),
       eventBus.on('PLAYER_MOVED',                 ({ to }) => { setFloor(to.z as FloorIndex); refreshFloor(to.z as FloorIndex); }),
       eventBus.on('TURN_END',                     () => refreshFloor(floor)),
+      eventBus.on('VIOLATION_LOGGED',             ({ type }) => setHudAlert({ msg: `■ INFRACTION: ${type}`, color: '#a84' })),
+      eventBus.on('ELEVATOR_ACCESS_DENIED',       ({ requiredKey }) => setHudAlert({ msg: `■ ACCESS DENIED — ${requiredKey as string}`, color: '#a44' })),
+      eventBus.on('LIGHT_SOURCE_TOGGLED',         ({ floor: f }) => { if ((f as number) === floor) refreshFloor(floor); }),
     ];
     return () => u.forEach(fn => fn());
   }, [floor, refreshFloor]);
+
+  useEffect(() => {
+    if (!hudAlert) return;
+    const t = window.setTimeout(() => setHudAlert(null), 3000);
+    return () => clearTimeout(t);
+  }, [hudAlert]);
 
   function handleEndTurn() {
     worldEngine.endTurn();
@@ -123,6 +134,7 @@ export default function App() {
     onOpenTerminal: setTerminal,
     onEndTurn: handleEndTurn,
     onOpenInventory: () => setShowInventory(v => !v),
+    onOpenElevator:  () => setShowElevator(true),
   });
 
   return (
@@ -142,6 +154,7 @@ export default function App() {
         {redDay && <span style={{ color: '#a44' }}>■ RED DAY</span>}
         {detained && <span style={{ color: '#f44', fontWeight: 'bold' }}>■ DETAINED</span>}
         {detected && !detained && <span style={{ color: '#f84' }}>■ DETECTED</span>}
+        {hudAlert && <span style={{ color: hudAlert.color }}>{hudAlert.msg}</span>}
         {ambientLevel !== 'LIT' && <span style={{ color: '#334' }}>◐ {ambientLevel}</span>}
         {flashlightOn && <span style={{ color: '#ffdd44' }}>◈ TORCH {flashlightBattery}t</span>}
         {inventory.length > 0 && (
@@ -233,6 +246,50 @@ export default function App() {
             </div>
           ))}
           <button style={{ ...sideBtn, marginTop: '4px' }} onClick={() => setShowInventory(false)}>CLOSE</button>
+        </div>
+      )}
+
+      {showElevator && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.88)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 200, fontFamily: 'monospace',
+        }}>
+          <div style={{ background: '#050d15', border: '1px solid #004488', padding: '24px', width: '300px' }}>
+            <div style={{ color: '#4488cc', fontSize: '10px', letterSpacing: '3px', marginBottom: '16px' }}>
+              ELEVATOR — SELECT DESTINATION
+            </div>
+            {([0, 2, 4, 6, 8, 10] as FloorIndex[]).map(f => {
+              const keyReq: ItemType | undefined = ({ 0: 'ELEVATOR_KEY_ADMIN' as ItemType, 8: 'ELEVATOR_KEY_ARCHIVE' as ItemType, 10: 'ELEVATOR_KEY_OPS' as ItemType } as Record<number, ItemType>)[f];
+              const hasKey = !keyReq || worldEngine.getState().playerState.inventory.some(i => i.type === keyReq);
+              const isCurrent = f === floor;
+              return (
+                <button
+                  key={f}
+                  disabled={isCurrent}
+                  onClick={() => {
+                    const ok = worldEngine.elevatorTo(f);
+                    if (ok) { setFloor(f); refreshFloor(f); setShowElevator(false); }
+                  }}
+                  style={{
+                    display: 'block', width: '100%', textAlign: 'left',
+                    background: isCurrent ? '#0a1520' : 'transparent',
+                    border: '1px solid ' + (isCurrent ? '#004488' : hasKey ? '#002244' : '#221100'),
+                    color: isCurrent ? '#4488cc' : hasKey ? '#7aaccc' : '#443322',
+                    fontFamily: 'monospace', fontSize: '11px',
+                    padding: '6px 10px', marginBottom: '4px',
+                    cursor: isCurrent ? 'default' : hasKey ? 'pointer' : 'not-allowed',
+                  }}
+                >
+                  {String(f).padStart(2, '0')} {FLOOR_LABELS[f]}{!hasKey ? '  [LOCKED]' : isCurrent ? '  [HERE]' : ''}
+                </button>
+              );
+            })}
+            <button style={{ ...sideBtn, marginTop: '8px', color: '#4a6070', borderColor: '#2a3a4a' }}
+              onClick={() => setShowElevator(false)}>
+              CANCEL
+            </button>
+          </div>
         </div>
       )}
 

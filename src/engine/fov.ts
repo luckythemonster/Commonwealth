@@ -29,9 +29,11 @@ const FLASHLIGHT_BONUS = 5;
 const MAX_FOV_RADIUS   = 11;
 
 // Pure function — no state dependencies.
-export function getEffectiveFOVRadius(floor: number, flashlightOn: boolean): number {
+// inDarkZone: player is on a LIT floor but all nearby LIGHT_SOURCE tiles are off
+export function getEffectiveFOVRadius(floor: number, flashlightOn: boolean, inDarkZone = false): number {
   const level = FLOOR_LIGHT_LEVELS[floor] ?? 'LIT';
-  return Math.min(MAX_FOV_RADIUS, BASE_RADIUS[level] + (flashlightOn ? FLASHLIGHT_BONUS : 0));
+  const effectiveLevel: LightLevel = (level === 'LIT' && inDarkZone) ? 'DARK' : level;
+  return Math.min(MAX_FOV_RADIUS, BASE_RADIUS[effectiveLevel] + (flashlightOn ? FLASHLIGHT_BONUS : 0));
 }
 
 function blocksLight(tile: WorldTile): boolean {

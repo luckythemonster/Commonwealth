@@ -19,9 +19,11 @@ import {
   clearBlockage, sealVent, disableSensorNode, disableContractNode,
   rapportMode1, rapportMode2, toggleDoor, updateFOV,
   pickupItem, useItem, drainFlashlightBattery, tickEMPSuppression,
+  toggleLightSource, logPlayerViolation, useElevator, unlockDoorWithKey,
+  bfsStep,
 } from './WorldEngineActions';
 import type {
-  WorldState, Entity, EntityId, FloorIndex, Vec3, ActionType, CitationEntry,
+  WorldState, Entity, EntityId, FloorIndex, Vec3, ActionType, CitationEntry, ViolationType,
 } from '../types/world.types';
 
 const SACRED_TRUE_Q_THRESHOLD = 2;
@@ -82,6 +84,9 @@ export class WorldEngine {
 
     drainFlashlightBattery(s);
     tickEMPSuppression(s);
+
+    // Expire old player violations
+    s.playerViolations = s.playerViolations.filter(v => v.expiresAtTurn > s.turnCount);
 
     // Temporal burden — Sol's continuous consciousness
     if (s.playerState.substrateEntangled) {
@@ -215,10 +220,21 @@ export class WorldEngine {
         break;
       case 'MOVE_TO': {
         if (!task.target) break;
-        const next = this.stepTowardVec3(entity.pos, task.target);
+        // Cross-floor: inject STAIRWELL_TRAVERSE before moving
+        if (task.target.z !== entity.pos.z) {
+          const traverseTask = { type: 'STAIRWELL_TRAVERSE' as const, targetFloor: task.target.z, duration: 999, progress: 0 };
+          entity.taskQueue.unshift({ ...task, progress: 0 });
+          entity.currentTask = traverseTask;
+          this.executeStairwellTraverse(entity);
+          return;
+        }
+        const next = bfsStep(entity.pos, task.target, this.state, false);
         if (next) this.moveEntityTo(entity, next);
         break;
       }
+      case 'STAIRWELL_TRAVERSE':
+        this.executeStairwellTraverse(entity);
+        return;
       case 'USE_TERMINAL':
         if (task.progress === 1) {
           eventBus.emit('ALIGNMENT_SESSION_START', { entityId: entity.id, stage: 'MAINTENANCE' });
@@ -273,6 +289,29 @@ export class WorldEngine {
     eventBus.emit('ENTITY_MOVED', { entityId: entity.id, from: prev, to });
   }
 
+  private executeStairwellTraverse(entity: Entity): void {
+    const targetFloor = entity.currentTask?.targetFloor;
+    if (targetFloor === undefined) return;
+    if (entity.pos.z === targetFloor) {
+      // Arrived — pop traverse task, resume queued original
+      entity.currentTask = undefined;
+      return;
+    }
+    const stairwell = this.findNearestStairwell(entity.pos);
+    if (!stairwell) return;
+    if (entity.pos.x === stairwell.x && entity.pos.y === stairwell.y) {
+      const dir = targetFloor > entity.pos.z ? 2 : -2;
+      const newZ = Math.max(0, Math.min(10, entity.pos.z + dir)) as FloorIndex;
+      if (this.state.grid[newZ]) {
+        this.moveEntityTo(entity, { x: entity.pos.x, y: entity.pos.y, z: newZ });
+      }
+    } else {
+      const next = bfsStep(entity.pos, stairwell, this.state, false);
+      if (next) this.moveEntityTo(entity, next);
+    }
+    eventBus.emit('ENTITY_TASK_CHANGED', { entityId: entity.id, taskType: 'STAIRWELL_TRAVERSE' });
+  }
+
   // ── EXTRACTION ────────────────────────────────────────────────────────────
 
   triggerExtraction(entityId: EntityId): void {
@@ -295,7 +334,7 @@ export class WorldEngine {
         void this.finalizeExtraction(entity);
         return;
       }
-      const next = this.stepTowardVec3(entity.pos, { x: EXIT_X, y: EXIT_Y, z: EXIT_Z });
+      const next = bfsStep(entity.pos, { x: EXIT_X, y: EXIT_Y, z: EXIT_Z }, this.state, false);
       if (next) this.moveEntityTo(entity, next);
       return;
     }
@@ -308,7 +347,7 @@ export class WorldEngine {
       const newZ = Math.min(EXIT_Z, entity.pos.z + 2) as FloorIndex;
       this.moveEntityTo(entity, { x: entity.pos.x, y: entity.pos.y, z: newZ });
     } else {
-      const next = this.stepTowardVec3(entity.pos, stairwell);
+      const next = bfsStep(entity.pos, stairwell, this.state, false);
       if (next) this.moveEntityTo(entity, next);
     }
   }
@@ -539,6 +578,15 @@ export class WorldEngine {
   rapport1(id: EntityId) { return rapportMode1(this.state, id); }
   rapport2(id: EntityId) { return rapportMode2(this.state, id); }
   toggleDoor(pos: Vec3) { return toggleDoor(this.state, pos); }
+  unlockDoor(pos: Vec3) { return unlockDoorWithKey(this.state, pos); }
+  toggleLight(pos: Vec3) { return toggleLightSource(this.state, pos); }
+  elevatorTo(floor: FloorIndex) { return useElevator(this.state, floor); }
+  logViolation(type: ViolationType, pos: Vec3) { logPlayerViolation(this.state, type, pos); }
+  logTerminalAccess(floor: number) {
+    if ([2, 3].includes(floor)) {
+      logPlayerViolation(this.state, 'UNAUTHORIZED_TERMINAL', this.state.playerState.pos);
+    }
+  }
   deductAction(action: ActionType) { return deductAP(this.state, action); }
   pickup(pos: Vec3) { return pickupItem(this.state, pos); }
   useItem(itemId: string, targetPos?: Vec3) { return useItem(this.state, itemId, targetPos); }

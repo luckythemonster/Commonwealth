@@ -77,6 +77,21 @@ function buildInitialItems(): Map<string, Item> {
     description: "Field notes on the entities. Shifts belief: unlocks RAPPORT_MODE Level 1.",
     oneUse: false,
   });
+  items.set('elevator-key-archive', {
+    id: 'elevator-key-archive', type: 'ELEVATOR_KEY_ARCHIVE', name: 'ELEVATOR KEY — ARCHIVE',
+    description: 'Grants elevator access to Archive Level 8.',
+    oneUse: false,
+  });
+  items.set('elevator-key-ops', {
+    id: 'elevator-key-ops', type: 'ELEVATOR_KEY_OPS', name: 'ELEVATOR KEY — OPS',
+    description: 'Grants elevator access to Operations Level 10.',
+    oneUse: false,
+  });
+  items.set('elevator-key-admin', {
+    id: 'elevator-key-admin', type: 'ELEVATOR_KEY_ADMIN', name: 'ELEVATOR KEY — ADMIN',
+    description: 'Grants elevator access to Administrative Level 0.',
+    oneUse: false,
+  });
   return items;
 }
 
@@ -221,6 +236,7 @@ export function buildInitialWorldState(): WorldState {
     visibleTiles: new Set<string>(),
     exploredByFloor: new Map<number, Set<string>>(),
     items: buildInitialItems(),
+    playerViolations: [],
   };
 }
 
