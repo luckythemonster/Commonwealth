@@ -1,0 +1,95 @@
+{
+  "character": {
+    "id": "e002bce9-b4f5-4323-b3ce-c6cffe47d63e",
+    "name": "Sol Ibarra-Castro",
+    "prompt": "A pragmatic, blue-collar sci-fi maintenance technician, self-described as a \"duct goblin\". They have Latine heritage (implied by the surname Ibarra-Castro and their family's origins in the \"Commonwealth of Colombia\"). They project a permanent state of profound exhaustion, with deep bags under their eyes reflecting chronic insomnia and an \"eternal night shift\" lifestyle. They wear highly functional, utilitarian maintenance gear that is visibly lived-in, damp with condensation, and stained with grime on the sleeves. Their outfit includes heavy work boots, thick gloves, and a high-tech but battered maintenance mask (which compensates for hazardous air, worn either over the face or pushed down around the neck). Slung heavily over one shoulder is a bulky, asymmetrical tool pack that drags like a \"sulky second spine\". Their posture is slightly slouched, guarded, and reluctant, embodying someone who tries to hide behind cold, bureaucratic logic to mask how deeply they care about others. Their expression should be sharp, snarky, and cynical, yet quietly observant\u2014the look of an exhausted worker who will push themselves past their limits just to make sure the people around them can breathe.",
+    "size": {
+      "width": 36,
+      "height": 36
+    },
+    "template_id": "mannequin",
+    "directions": 4,
+    "view": "high top-down",
+    "created_at": "2026-04-23T05:52:35.087363+00:00"
+  },
+  "frames": {
+    "rotations": {
+      "south": "rotations/south.png",
+      "west": "rotations/west.png",
+      "east": "rotations/east.png",
+      "north": "rotations/north.png"
+    },
+    "animations": {
+      "Crouched_Walking-3618584f": {
+        "west": [
+          "animations/Crouched_Walking-3618584f/west/frame_000.png",
+          "animations/Crouched_Walking-3618584f/west/frame_001.png",
+          "animations/Crouched_Walking-3618584f/west/frame_002.png",
+          "animations/Crouched_Walking-3618584f/west/frame_003.png",
+          "animations/Crouched_Walking-3618584f/west/frame_004.png",
+          "animations/Crouched_Walking-3618584f/west/frame_005.png"
+        ],
+        "south": [
+          "animations/Crouched_Walking-3618584f/south/frame_000.png",
+          "animations/Crouched_Walking-3618584f/south/frame_001.png",
+          "animations/Crouched_Walking-3618584f/south/frame_002.png",
+          "animations/Crouched_Walking-3618584f/south/frame_003.png",
+          "animations/Crouched_Walking-3618584f/south/frame_004.png",
+          "animations/Crouched_Walking-3618584f/south/frame_005.png"
+        ],
+        "north": [
+          "animations/Crouched_Walking-3618584f/north/frame_000.png",
+          "animations/Crouched_Walking-3618584f/north/frame_001.png",
+          "animations/Crouched_Walking-3618584f/north/frame_002.png",
+          "animations/Crouched_Walking-3618584f/north/frame_003.png",
+          "animations/Crouched_Walking-3618584f/north/frame_004.png",
+          "animations/Crouched_Walking-3618584f/north/frame_005.png"
+        ],
+        "east": [
+          "animations/Crouched_Walking-3618584f/east/frame_000.png",
+          "animations/Crouched_Walking-3618584f/east/frame_001.png",
+          "animations/Crouched_Walking-3618584f/east/frame_002.png",
+          "animations/Crouched_Walking-3618584f/east/frame_003.png",
+          "animations/Crouched_Walking-3618584f/east/frame_004.png",
+          "animations/Crouched_Walking-3618584f/east/frame_005.png"
+        ]
+      },
+      "animation-71c6e6ae": {
+        "west": [
+          "animations/animation-71c6e6ae/west/frame_000.png",
+          "animations/animation-71c6e6ae/west/frame_001.png",
+          "animations/animation-71c6e6ae/west/frame_002.png",
+          "animations/animation-71c6e6ae/west/frame_003.png",
+          "animations/animation-71c6e6ae/west/frame_004.png",
+          "animations/animation-71c6e6ae/west/frame_005.png"
+        ],
+        "south": [
+          "animations/animation-71c6e6ae/south/frame_000.png",
+          "animations/animation-71c6e6ae/south/frame_001.png",
+          "animations/animation-71c6e6ae/south/frame_002.png",
+          "animations/animation-71c6e6ae/south/frame_003.png",
+          "animations/animation-71c6e6ae/south/frame_004.png",
+          "animations/animation-71c6e6ae/south/frame_005.png"
+        ],
+        "north": [
+          "animations/animation-71c6e6ae/north/frame_000.png",
+          "animations/animation-71c6e6ae/north/frame_001.png",
+          "animations/animation-71c6e6ae/north/frame_002.png",
+          "animations/animation-71c6e6ae/north/frame_003.png",
+          "animations/animation-71c6e6ae/north/frame_004.png",
+          "animations/animation-71c6e6ae/north/frame_005.png"
+        ],
+        "east": [
+          "animations/animation-71c6e6ae/east/frame_000.png",
+          "animations/animation-71c6e6ae/east/frame_001.png",
+          "animations/animation-71c6e6ae/east/frame_002.png",
+          "animations/animation-71c6e6ae/east/frame_003.png",
+          "animations/animation-71c6e6ae/east/frame_004.png",
+          "animations/animation-71c6e6ae/east/frame_005.png"
+        ]
+      }
+    }
+  },
+  "export_version": "2.0",
+  "export_date": "2026-04-23T06:01:10.989589"
+}
