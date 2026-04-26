@@ -102,6 +102,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private createCharAnimations(): void {
+    let count = 0;
     for (const anim of CHAR_ANIMS) {
       if (this.anims.exists(anim.key)) continue;
       this.anims.create({
@@ -110,7 +111,11 @@ export class GameScene extends Phaser.Scene {
         frameRate: anim.frameRate,
         repeat: anim.repeat,
       });
+      count++;
     }
+    console.log(`[GameScene] registered ${count} char animations`);
+    const testKey = 'solibarracastro_walkcycle_south';
+    console.log(`[GameScene] ${testKey} exists?`, this.anims.exists(testKey));
   }
 
   private selectAnimKey(e: EntityRenderData, facing: string): string {
@@ -373,6 +378,9 @@ export class GameScene extends Phaser.Scene {
       let sprite = this.entitySprites.get(e.id);
       if (!sprite) {
         sprite = this.add.sprite(0, 0, 'chars').setDepth(5);
+        // Color tint distinguishes character types if frames fail to load
+        const tint = e.isPlayer ? 0x88ffcc : e.isEnforcer ? 0xff8888 : 0xddcc88;
+        sprite.setTint(tint);
         this.entitySprites.set(e.id, sprite);
       }
 
@@ -383,6 +391,7 @@ export class GameScene extends Phaser.Scene {
 
       const animKey = this.selectAnimKey(e, facing);
       if (this.anims.exists(animKey) && sprite.anims.getName() !== animKey) {
+        sprite.clearTint();  // remove tint once real animation plays
         sprite.play(animKey, true);
       }
     }
