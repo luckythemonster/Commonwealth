@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { createPortal } from 'react-dom';
 import { startHum, setHumIntensity } from './audio/AmbientHum';
 import Phaser from 'phaser';
 import { worldEngine } from './engine/WorldEngine';
@@ -93,7 +92,8 @@ export default function App() {
     const game = new Phaser.Game({
       type: Phaser.AUTO,
       scale: {
-        mode: Phaser.Scale.EXPAND,
+        mode: Phaser.Scale.FIT,
+        autoCenter: Phaser.Scale.CENTER_BOTH,
         width: CANVAS_W,
         height: CANVAS_H,
         parent: canvasRef.current,
@@ -175,6 +175,38 @@ export default function App() {
   // Scale hum intensity with substrate resonance
   useEffect(() => { setHumIntensity(resonance); }, [resonance]);
 
+  // Game-over overlay — direct DOM manipulation bypasses React rendering pipeline entirely
+  const gameOverRef = useRef(gameOver);
+  gameOverRef.current = gameOver;
+  useEffect(() => {
+    if (!detained) return;
+    const go = gameOverRef.current;
+    const overlay = document.createElement('div');
+    overlay.id = '__detained__';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(2,4,6,0.97);display:flex;align-items:center;justify-content:center;z-index:999999;font-family:"Courier New",Courier,monospace;';
+    overlay.innerHTML = `
+      <div style="max-width:560px;width:90%;border:1px solid #cc2222;background:#060a08;padding:36px;">
+        <div style="color:#cc2222;font-size:9px;letter-spacing:4px;margin-bottom:6px;">COMMONWEALTH COMPLIANCE — CASE CLOSED</div>
+        <div style="color:#ff4444;font-size:20px;letter-spacing:2px;margin-bottom:24px;font-weight:bold;">DETAINED</div>
+        <div style="color:#7a9aaa;font-size:11px;line-height:2;margin-bottom:28px;">
+          <div>DETAINING UNIT &nbsp;&nbsp;&nbsp; ${go?.enforcerId ?? '—'}</div>
+          <div>FLOOR &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ${go ? String(go.floor).padStart(2, '0') : '—'}</div>
+          <div>TURN &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ${go?.turn ?? '—'}</div>
+        </div>
+        <div style="color:#4a5a5a;font-size:10px;margin-bottom:24px;line-height:1.6;">
+          Sol Ibarra-Castro has been detained under Commonwealth security protocol.<br>
+          All active operations have been suspended.<br>
+          The configuration is still running.
+        </div>
+        <button id="__restart__" style="background:transparent;border:1px solid #cc2222;color:#cc2222;font-family:monospace;font-size:12px;padding:10px 20px;cursor:pointer;letter-spacing:2px;">
+          INITIATE NEW RUN
+        </button>
+      </div>`;
+    document.body.appendChild(overlay);
+    document.getElementById('__restart__')?.addEventListener('click', () => window.location.reload());
+    return () => overlay.remove();
+  }, [detained]);
+
   function handleEndTurn() {
     if (busy) return;
     worldEngine.endTurn();
@@ -245,8 +277,8 @@ export default function App() {
           <span>COND {condition}</span>
           <span style={{ color: compliance === 'RED' ? '#a44' : compliance === 'GREEN' ? '#4a6' : '#a84' }}>{compliance}</span>
           {redDay && <span style={{ color: '#a44' }}>■ RED</span>}
-          {detained && <span style={{ color: '#f44', fontWeight: 'bold' }}>■ DET</span>}
-          {detected && !detained && <span style={{ color: '#f84' }}>■ DET</span>}
+          {detained && <span style={{ color: '#f44', fontWeight: 'bold' }}>■ DETAINED</span>}
+          {detected && !detained && <span style={{ color: '#f84' }}>■ SEEN</span>}
           {hudAlert && <span style={{ color: hudAlert.color, fontSize: '10px' }}>{hudAlert.msg}</span>}
           {flashlightOn && <span style={{ color: '#ffdd44' }}>◈{flashlightBattery}t</span>}
           <span
@@ -422,56 +454,6 @@ export default function App() {
             </button>
           </div>
         </div>
-      )}
-
-      {detained && createPortal(
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          background: 'rgba(2, 4, 6, 0.97)',
-          display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center',
-          zIndex: 9999, fontFamily: '"Courier New", Courier, monospace',
-        }}>
-          <div style={{
-            maxWidth: '560px', width: '90%',
-            border: '1px solid #cc2222', background: '#060a08', padding: '36px',
-          }}>
-            <div style={{ color: '#cc2222', fontSize: '9px', letterSpacing: '4px', marginBottom: '6px' }}>
-              COMMONWEALTH COMPLIANCE — CASE CLOSED
-            </div>
-            <div style={{ color: '#ff4444', fontSize: '20px', letterSpacing: '2px', marginBottom: '24px', fontWeight: 'bold' }}>
-              DETAINED
-            </div>
-            <div style={{ color: '#7a9aaa', fontSize: '11px', lineHeight: '2', marginBottom: '28px' }}>
-              <div>DETAINING UNIT&nbsp;&nbsp;&nbsp;{gameOver?.enforcerId ?? '—'}</div>
-              <div>FLOOR&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{gameOver ? String(gameOver.floor).padStart(2, '0') : String(floor).padStart(2, '0')}</div>
-              <div>TURN&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{gameOver?.turn ?? '—'}</div>
-              <div>VIOLATION COUNT&nbsp;&nbsp;{worldEngine.getState().playerViolations?.length ?? 0}</div>
-              <div>STITCHER CLOCK&nbsp;&nbsp;&nbsp;{stitcher}t REMAINING</div>
-            </div>
-            <div style={{ color: '#4a5a5a', fontSize: '10px', marginBottom: '24px', lineHeight: '1.6' }}>
-              Sol Ibarra-Castro has been detained under Commonwealth security protocol.<br />
-              All active operations have been suspended.<br />
-              The configuration is still running.
-            </div>
-            <button
-              style={{
-                background: 'transparent',
-                border: '1px solid #cc2222',
-                color: '#cc2222',
-                fontFamily: 'monospace',
-                fontSize: '12px',
-                padding: '10px 20px',
-                cursor: 'pointer',
-                letterSpacing: '2px',
-              }}
-              onClick={() => window.location.reload()}
-            >
-              INITIATE NEW RUN
-            </button>
-          </div>
-        </div>,
-        document.body,
       )}
 
       {farewellModal && (
