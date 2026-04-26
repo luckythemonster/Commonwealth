@@ -227,6 +227,22 @@ export class GameScene extends Phaser.Scene {
         const p = pos as { x: number; y: number; z: number };
         if (p.z === this.currentFloor) this.flashTile(p.x, p.y, 0xcc2222, 0.6);
       }),
+      eventBus.on('ENTITY_HIT', ({ entityId }) => {
+        const lastPos = this.entityLastPos.get(entityId as string);
+        if (lastPos) {
+          this.flashTile(lastPos.x, lastPos.y, 0xff2200, 0.7);
+        }
+        // Full-screen red pulse — the struggle is violent
+        this.overlayGraphics.fillStyle(0xaa2200, 0.3);
+        this.overlayGraphics.fillRect(0, 0, this.scale.width, this.scale.height);
+        this.time.delayedCall(100, () => this.renderOverlay());
+      }),
+      eventBus.on('ATTACK_STAGGERED', () => {
+        // Brief white flash: blocked / can't hit again this turn
+        this.overlayGraphics.fillStyle(0xffffff, 0.12);
+        this.overlayGraphics.fillRect(0, 0, this.scale.width, this.scale.height);
+        this.time.delayedCall(60, () => this.renderOverlay());
+      }),
     );
   }
 

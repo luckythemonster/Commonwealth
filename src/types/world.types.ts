@@ -224,6 +224,12 @@ export interface Entity {
 
   // Knock-out state — set by ATTACK action; entity returns to ACTIVE when turn reaches this value
   dormantUntilTurn?: number;
+
+  // Combat HP — enforcers only. Undefined = instant KO (silicates, named entities).
+  // Stagger: each entity can absorb at most 1 hit per turn (lastHitTurn tracks this).
+  hp?: number;
+  maxHp?: number;
+  lastHitTurn?: number;
 }
 
 export interface WorldState {

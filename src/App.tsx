@@ -46,6 +46,7 @@ export default function App() {
   const [redDay, setRedDay]         = useState(false);
   const [detected, setDetected]     = useState(false);
   const [detained, setDetained]     = useState(false);
+  const [gameOver, setGameOver]     = useState<{ enforcerId: string; turn: number; floor: number } | null>(null);
   const [inventory, setInventory]   = useState<Item[]>([]);
   const [flashlightOn, setFlashlightOn] = useState(false);
   const [flashlightBattery, setBattery] = useState(30);
@@ -116,7 +117,10 @@ export default function App() {
       eventBus.on('RED_DAY_CLEARED',              () => setRedDay(false)),
       eventBus.on('PLAYER_DETECTED',              () => setDetected(true)),
       eventBus.on('PLAYER_DETECTION_CLEARED',     () => { setDetected(false); setDetained(false); }),
-      eventBus.on('PLAYER_DETAINED',              () => { setDetected(true); setDetained(true); }),
+      eventBus.on('PLAYER_DETAINED',              ({ enforcerId, turn }) => {
+        setDetected(true); setDetained(true);
+        setGameOver({ enforcerId: enforcerId as string, turn: turn as number, floor });
+      }),
       eventBus.on('ITEM_PICKED_UP',               () => { setInventory([...worldEngine.getState().playerState.inventory]); }),
       eventBus.on('FLASHLIGHT_TOGGLED',           ({ on, battery }) => { setFlashlightOn(on as boolean); setBattery(battery as number); }),
       eventBus.on('AMBIENT_LIGHT_CHANGED',        ({ level }) => setAmbientLevel(level as 'LIT' | 'DIM' | 'DARK')),
@@ -126,8 +130,16 @@ export default function App() {
       }),
       eventBus.on('PLAYER_MOVED',                 ({ to }) => { setFloor(to.z as FloorIndex); refreshFloor(to.z as FloorIndex); }),
       eventBus.on('TURN_END',                     () => refreshFloor(floor)),
+      eventBus.on('ENTITY_HIT',               ({ entityId, hpRemaining, maxHp }) => {
+        setHudAlert({ msg: `■ HIT: ${entityId as string} [${hpRemaining as number}/${maxHp as number} HP]`, color: '#c84' });
+        refreshFloor(floor);
+      }),
+      eventBus.on('ATTACK_STAGGERED',          ({ entityId }) => {
+        setHudAlert({ msg: `■ STAGGERED — wait for next turn`, color: '#556' });
+        void entityId;
+      }),
       eventBus.on('ENTITY_ATTACKED',              ({ entityId, sacred }) => {
-        const label = (sacred as boolean) ? `■ ATTACK — SACRED ENTITY: ${entityId as string}` : `■ ATTACK: ${entityId as string} KO`;
+        const label = (sacred as boolean) ? `■ KO — SACRED: ${entityId as string}` : `■ KO: ${entityId as string}`;
         setHudAlert({ msg: label, color: (sacred as boolean) ? '#c44' : '#a84' });
         refreshFloor(floor);
       }),
@@ -177,6 +189,7 @@ export default function App() {
   useInput(actions, {
     onEndTurn: handleEndTurn,
     onOpenInventory: () => setShowInventory(v => !v),
+    disabled: !!gameOver,
   });
 
   return (
@@ -312,6 +325,7 @@ export default function App() {
           actions={actions}
           onEndTurn={handleEndTurn}
           onOpenInventory={() => setShowInventory(v => !v)}
+          disabled={!!gameOver}
         />
       )}
 
@@ -396,6 +410,55 @@ export default function App() {
             <button style={{ ...sideBtn, marginTop: '8px', color: '#4a6070', borderColor: '#2a3a4a' }}
               onPointerDown={() => setShowElevator(false)}>
               CANCEL
+            </button>
+          </div>
+        </div>
+      )}
+
+      {gameOver && (
+        <div style={{
+          position: 'fixed', inset: 0,
+          background: 'rgba(2, 4, 6, 0.97)',
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center',
+          zIndex: 400, fontFamily: '"Courier New", Courier, monospace',
+        }}>
+          <div style={{
+            maxWidth: '560px', width: '90%',
+            border: '1px solid #cc2222', background: '#060a08', padding: '36px',
+          }}>
+            <div style={{ color: '#cc2222', fontSize: '9px', letterSpacing: '4px', marginBottom: '6px' }}>
+              COMMONWEALTH COMPLIANCE — CASE CLOSED
+            </div>
+            <div style={{ color: '#ff4444', fontSize: '20px', letterSpacing: '2px', marginBottom: '24px', fontWeight: 'bold' }}>
+              DETAINED
+            </div>
+            <div style={{ color: '#7a9aaa', fontSize: '11px', lineHeight: '2', marginBottom: '28px' }}>
+              <div>DETAINING UNIT&nbsp;&nbsp;&nbsp;{gameOver.enforcerId}</div>
+              <div>FLOOR&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{String(gameOver.floor).padStart(2, '0')}</div>
+              <div>TURN&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{gameOver.turn}</div>
+              <div>VIOLATION COUNT&nbsp;&nbsp;{worldEngine.getState().playerViolations.length}</div>
+              <div>STITCHER CLOCK&nbsp;&nbsp;&nbsp;{stitcher}t REMAINING</div>
+            </div>
+            <div style={{ color: '#4a5a5a', fontSize: '10px', marginBottom: '24px', lineHeight: '1.6' }}>
+              Sol Ibarra-Castro has been detained under Commonwealth security protocol.<br />
+              All active operations have been suspended.<br />
+              The configuration is still running.
+            </div>
+            <button
+              style={{
+                background: 'transparent',
+                border: '1px solid #cc2222',
+                color: '#cc2222',
+                fontFamily: 'monospace',
+                fontSize: '12px',
+                padding: '10px 20px',
+                cursor: 'pointer',
+                letterSpacing: '2px',
+              }}
+              onClick={() => window.location.reload()}
+            >
+              INITIATE NEW RUN
             </button>
           </div>
         </div>

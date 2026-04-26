@@ -100,6 +100,8 @@ export function seedEnforcers(state: WorldState): void {
       cacheNotes: [],
       taskQueue: [],
       currentTask: undefined,
+      hp: 3,
+      maxHp: 3,
     };
     state.entities.set(id, entity);
     routes.set(id, { waypoints: route, currentIndex: 0 });

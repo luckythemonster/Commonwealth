@@ -130,6 +130,10 @@ export interface EventMap {
 
   // --- COMBAT ---
   ENTITY_ATTACKED: { entityId: EntityId; pos: Vec3; turn: number; sacred: boolean };
+  // Fired when an entity with HP > 0 absorbs a hit but is NOT yet knocked out
+  ENTITY_HIT: { entityId: EntityId; hpRemaining: number; maxHp: number; pos: Vec3 };
+  // Fired when an attack lands but stagger resistance blocks it for this turn
+  ATTACK_STAGGERED: { entityId: EntityId };
 }
 
 export type EventName = keyof EventMap;
