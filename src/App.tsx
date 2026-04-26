@@ -82,6 +82,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!canvasRef.current) return;
     const game = new Phaser.Game({
       type: Phaser.AUTO,
       scale: {
@@ -89,8 +90,8 @@ export default function App() {
         autoCenter: Phaser.Scale.CENTER_BOTH,
         width: CANVAS_W,
         height: CANVAS_H,
+        parent: canvasRef.current,
       },
-      parent: canvasRef.current ?? undefined,
       backgroundColor: '#0c1520',
       scene: [GameScene],
     });
@@ -251,14 +252,17 @@ export default function App() {
       )}
 
       {/* ── MAIN LAYOUT ── */}
+      {/* Canvas container: fixed positioning so Phaser reads exact pixel bounds */}
+      <div ref={canvasRef} style={{
+        position: 'fixed',
+        top: '32px',
+        left: 0,
+        right: isMobile ? 0 : '220px',
+        bottom: isMobile ? 'calc(164px + env(safe-area-inset-bottom, 0px))' : 0,
+        overflow: 'hidden',
+      }} />
       <div style={{ display: 'flex', paddingTop: '32px' }}>
-        <div ref={canvasRef} style={{
-          flex: 1,
-          height: isMobile
-            ? 'calc(100vh - 32px - 164px - env(safe-area-inset-bottom, 0px))'
-            : 'calc(100vh - 32px)',
-          overflow: 'hidden',
-        }} />
+        <div style={{ flex: 1 }} />
 
         {/* Desktop sidebar — hidden on mobile */}
         {!isMobile && (

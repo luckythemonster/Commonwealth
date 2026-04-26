@@ -151,34 +151,27 @@ export function tickEnforcer(entity: Entity, state: WorldState): void {
     return;
   }
 
-  // Player visible on same floor
+  // Player visible on same floor — always pursue
   if (playerVisible) {
-    if (!hasViolation) {
-      // Legitimacy: no violations — observe only, close to 3 tiles max
-      const dist = Math.abs(entity.pos.x - state.playerState.pos.x)
-                 + Math.abs(entity.pos.y - state.playerState.pos.y);
-      if (dist > 3) {
-        const next = bfsStep(entity.pos, state.playerState.pos, state, true);
-        if (next) moveEnforcer(entity, next, state);
-      }
-      return;
-    }
-
-    // Active violation — initiate or update chase
     chaseTargets.set(entity.id, { ...state.playerState.pos });
     lostTimers.set(entity.id, 0);
     alertTargets.delete(entity.id);
-    checkDetectionConsequences(entity, state);
 
-    if (floorViolation) {
-      // Violation committed on this floor — close pursuit
+    const dist = Math.abs(entity.pos.x - state.playerState.pos.x)
+               + Math.abs(entity.pos.y - state.playerState.pos.y);
+
+    if (hasViolation) {
+      // Active violation: full chase, detention on contact
+      checkDetectionConsequences(entity, state);
       const next = bfsStep(entity.pos, state.playerState.pos, state, true);
       if (next) moveEnforcer(entity, next, state);
     } else {
-      // Violation flagged elsewhere — shadow within 5 tiles, hold
-      const dist = Math.abs(entity.pos.x - state.playerState.pos.x)
-                 + Math.abs(entity.pos.y - state.playerState.pos.y);
-      if (dist > 5) {
+      // No violations yet: pursue but stop 2 tiles away (shadow / warn)
+      // Still fires PLAYER_DETECTED so the HUD shows ■ DETECTED
+      if (dist <= 2) {
+        eventBus.emit('PLAYER_DETECTED', { enforcerId: entity.id, pos: entity.pos });
+      }
+      if (dist > 2) {
         const next = bfsStep(entity.pos, state.playerState.pos, state, true);
         if (next) moveEnforcer(entity, next, state);
       }
