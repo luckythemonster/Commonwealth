@@ -84,11 +84,9 @@ export class GameScene extends Phaser.Scene {
 
   preload(): void {
     this.load.spritesheet('tileset', '/assets/tileset.png', { frameWidth: SPRITE_SIZE, frameHeight: SPRITE_SIZE });
-    this.load.atlas(
-      'chars',
-      '/assets/sprite_pack/EIRA-7,_Enforcer,_Sol.png',
-      '/assets/sprite_pack/EIRA-7,_Enforcer,_Sol.json',
-    );
+    // Load JSON separately so animations array is available in cache after atlas loads
+    this.load.json('chars-anim', '/assets/sprite_pack/chars.json');
+    this.load.atlas('chars', '/assets/sprite_pack/chars.png', '/assets/sprite_pack/chars.json');
   }
 
   create(): void {
@@ -105,7 +103,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private createCharAnimations(): void {
-    const data = this.cache.json.get('chars') as {
+    const data = this.cache.json.get('chars-anim') as {
       animations?: Array<{
         key: string;
         frameRate: number;
@@ -114,7 +112,7 @@ export class GameScene extends Phaser.Scene {
       }>;
     } | null;
     if (!data?.animations) {
-      console.warn('GameScene: char atlas animation data not found in cache');
+      console.warn('GameScene: chars-anim not found in cache — animations unavailable');
       return;
     }
     for (const anim of data.animations) {

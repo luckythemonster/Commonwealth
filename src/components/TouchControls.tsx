@@ -40,7 +40,8 @@ export function TouchControls({ actions, onEndTurn, onOpenInventory }: Props) {
       bottom: 0,
       left: 0,
       right: 0,
-      height: '164px',
+      height: 'calc(164px + env(safe-area-inset-bottom, 0px))',
+      paddingBottom: 'env(safe-area-inset-bottom, 0px)',
       pointerEvents: 'none',
       zIndex: 40,
     }}>
