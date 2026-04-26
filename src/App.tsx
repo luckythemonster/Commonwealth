@@ -273,6 +273,7 @@ export default function App() {
         right: isMobile ? 0 : '220px',
         bottom: isMobile ? 'calc(164px + env(safe-area-inset-bottom, 0px))' : 0,
         overflow: 'hidden',
+        zIndex: 1,
       }} />
       <div style={{ display: 'flex', paddingTop: '32px' }}>
         <div style={{ flex: 1 }} />
@@ -417,11 +418,12 @@ export default function App() {
 
       {gameOver && (
         <div style={{
-          position: 'fixed', inset: 0,
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          width: '100vw', height: '100vh',
           background: 'rgba(2, 4, 6, 0.97)',
           display: 'flex', flexDirection: 'column',
           alignItems: 'center', justifyContent: 'center',
-          zIndex: 400, fontFamily: '"Courier New", Courier, monospace',
+          zIndex: 9999, fontFamily: '"Courier New", Courier, monospace',
         }}>
           <div style={{
             maxWidth: '560px', width: '90%',
