@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { startHum, setHumIntensity } from './audio/AmbientHum';
 import Phaser from 'phaser';
 import { worldEngine } from './engine/WorldEngine';
@@ -92,8 +93,7 @@ export default function App() {
     const game = new Phaser.Game({
       type: Phaser.AUTO,
       scale: {
-        mode: Phaser.Scale.FIT,
-        autoCenter: Phaser.Scale.CENTER_BOTH,
+        mode: Phaser.Scale.EXPAND,
         width: CANVAS_W,
         height: CANVAS_H,
         parent: canvasRef.current,
@@ -424,10 +424,9 @@ export default function App() {
         </div>
       )}
 
-      {gameOver && (
+      {gameOver && createPortal(
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          width: '100vw', height: '100vh',
           background: 'rgba(2, 4, 6, 0.97)',
           display: 'flex', flexDirection: 'column',
           alignItems: 'center', justifyContent: 'center',
@@ -471,7 +470,8 @@ export default function App() {
               INITIATE NEW RUN
             </button>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
 
       {farewellModal && (
