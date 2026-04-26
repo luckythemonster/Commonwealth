@@ -367,20 +367,17 @@ export class GameScene extends Phaser.Scene {
       }
       this.entityLastPos.set(e.id, { x: e.x, y: e.y });
 
-      // Ghost background indicator
-      if (e.isGhost) {
-        const bgColor = e.isPlayer ? 0x00cc99 : e.isEnforcer ? 0xcc2222 : 0x887744;
-        this.entityBgGfx.fillStyle(bgColor, 0.12);
-        this.entityBgGfx.fillRect(e.x * TILE_SIZE + 3, e.y * TILE_SIZE + 3, TILE_SIZE - 6, TILE_SIZE - 6);
-      }
+      // Always draw a colored background square — distinct per entity type
+      // This shows even if the sprite texture fails, and confirms correct routing
+      const bgColor = e.isPlayer ? 0x00cc99 : e.isEnforcer ? 0xcc2222 : 0x887744;
+      const bgAlpha = e.isGhost ? 0.12 : 0.5;
+      this.entityBgGfx.fillStyle(bgColor, bgAlpha);
+      this.entityBgGfx.fillRect(e.x * TILE_SIZE + 3, e.y * TILE_SIZE + 3, TILE_SIZE - 6, TILE_SIZE - 6);
 
-      // Get or create sprite
+      // Get or create sprite (drawn on top of background)
       let sprite = this.entitySprites.get(e.id);
       if (!sprite) {
         sprite = this.add.sprite(0, 0, 'chars').setDepth(5);
-        // Color tint distinguishes character types if frames fail to load
-        const tint = e.isPlayer ? 0x88ffcc : e.isEnforcer ? 0xff8888 : 0xddcc88;
-        sprite.setTint(tint);
         this.entitySprites.set(e.id, sprite);
       }
 
@@ -391,7 +388,6 @@ export class GameScene extends Phaser.Scene {
 
       const animKey = this.selectAnimKey(e, facing);
       if (this.anims.exists(animKey) && sprite.anims.getName() !== animKey) {
-        sprite.clearTint();  // remove tint once real animation plays
         sprite.play(animKey, true);
       }
     }
