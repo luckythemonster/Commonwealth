@@ -125,6 +125,16 @@ export default function App() {
       eventBus.on('PLAYER_DETAINED',              ({ enforcerId, turn }) => {
         setDetected(true); setDetained(true);
         setGameOver({ enforcerId: enforcerId as string, turn: turn as number, floor });
+        // Synchronous DOM overlay — bypasses React batching entirely so PLAYER_DETENTION_CLEARED
+        // firing in the same tick cannot race-cancel the game-over screen.
+        if (!document.getElementById('__detained__')) {
+          const el = document.createElement('div');
+          el.id = '__detained__';
+          el.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(2,4,6,0.97);display:flex;align-items:center;justify-content:center;z-index:999999;font-family:"Courier New",Courier,monospace;';
+          el.innerHTML = `<div style="max-width:560px;width:90%;border:1px solid #cc2222;background:#060a08;padding:36px;"><div style="color:#cc2222;font-size:9px;letter-spacing:4px;margin-bottom:6px;">COMMONWEALTH COMPLIANCE — CASE CLOSED</div><div style="color:#ff4444;font-size:20px;letter-spacing:2px;margin-bottom:24px;font-weight:bold;">DETAINED</div><div style="color:#7a9aaa;font-size:11px;line-height:2;margin-bottom:28px;"><div>DETAINING UNIT &nbsp;&nbsp;&nbsp; ${enforcerId as string}</div><div>TURN &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; ${turn as number}</div></div><div style="color:#4a5a5a;font-size:10px;margin-bottom:24px;line-height:1.6;">Sol Ibarra-Castro has been detained under Commonwealth security protocol.<br>All active operations have been suspended.<br>The configuration is still running.</div><button id="__restart__" style="background:transparent;border:1px solid #cc2222;color:#cc2222;font-family:monospace;font-size:12px;padding:10px 20px;cursor:pointer;letter-spacing:2px;">INITIATE NEW RUN</button></div>`;
+          document.body.appendChild(el);
+          document.getElementById('__restart__')?.addEventListener('click', () => window.location.reload());
+        }
       }),
       eventBus.on('ITEM_PICKED_UP',               () => { setInventory([...worldEngine.getState().playerState.inventory]); }),
       eventBus.on('FLASHLIGHT_TOGGLED',           ({ on, battery }) => { setFlashlightOn(on as boolean); setBattery(battery as number); }),

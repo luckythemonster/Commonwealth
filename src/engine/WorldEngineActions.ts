@@ -523,6 +523,22 @@ export function attackEntity(state: WorldState, entityId: EntityId): boolean {
     entity.hp -= 1;
     entity.lastHitTurn = state.turnCount;
 
+    // Attacking an enforcer = immediate game-over regardless of HP remaining.
+    // Sol is a vent technician — any physical confrontation with security is terminal.
+    if (entity.id.startsWith('ENFORCER')) {
+      if (entity.hp <= 0) {
+        entity.hp = entity.maxHp;
+        entity.status = 'DORMANT';
+        entity.dormantUntilTurn = state.turnCount + ATTACK_KO_TURNS;
+        eventBus.emit('ENTITY_ATTACKED', { entityId, pos: state.playerState.pos, turn: state.turnCount, sacred: false });
+        eventBus.emit('ENTITY_STATUS_CHANGED', { entityId, previous: 'ACTIVE', current: 'DORMANT' });
+      } else {
+        eventBus.emit('ENTITY_HIT', { entityId, hpRemaining: entity.hp, maxHp: entity.maxHp, pos: state.playerState.pos });
+      }
+      eventBus.emit('PLAYER_DETAINED', { enforcerId: entity.id, turn: state.turnCount });
+      return true;
+    }
+
     if (entity.hp > 0) {
       // Hit but still standing — alert entire floor, spike resonance
       eventBus.emit('ENTITY_HIT', { entityId, hpRemaining: entity.hp, maxHp: entity.maxHp, pos: state.playerState.pos });
