@@ -7,6 +7,8 @@ import Phaser from 'phaser';
 import { eventBus } from '../engine/EventBus';
 import type { WorldTile, FloorIndex } from '../types/world.types';
 import { CHAR_ANIMS } from '../data/char-anims';
+// CHAR_ANIMS uses numeric frame indices (position in the atlas frames array).
+// This avoids string hash-ID lookups which can silently fail on some Phaser builds.
 
 const TILE_SIZE   = 32;   // display px per tile
 const SPRITE_SIZE = 16;   // source tile sprite px
@@ -105,17 +107,16 @@ export class GameScene extends Phaser.Scene {
     let count = 0;
     for (const anim of CHAR_ANIMS) {
       if (this.anims.exists(anim.key)) continue;
+      // frames are numeric indices into the atlas frames array — no string hash lookup needed
       this.anims.create({
         key: anim.key,
-        frames: anim.frames.map(frame => ({ key: 'chars', frame })),
+        frames: anim.frames.map(idx => ({ key: 'chars', frame: idx })),
         frameRate: anim.frameRate,
         repeat: anim.repeat,
       });
       count++;
     }
-    console.log(`[GameScene] registered ${count} char animations`);
-    const testKey = 'solibarracastro_walkcycle_south';
-    console.log(`[GameScene] ${testKey} exists?`, this.anims.exists(testKey));
+    console.log(`[GameScene] registered ${count} char animations, chars texture exists: ${this.textures.exists('chars')}`);
   }
 
   private selectAnimKey(e: EntityRenderData, facing: string): string {
