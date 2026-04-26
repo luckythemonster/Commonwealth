@@ -62,9 +62,20 @@ export default function App() {
     s.loadFloorData(state.grid[z], z);
     const entityData = [...state.entities.values()]
       .filter(e => e.pos.z === z)
-      .map(e => ({ x: e.pos.x, y: e.pos.y, id: e.id, isGhost: e.isGhost, isEnforcer: e.id.startsWith('ENFORCER'), isPlayer: false }));
+      .map(e => ({
+        x: e.pos.x, y: e.pos.y, id: e.id,
+        isGhost: e.isGhost,
+        isEnforcer: e.id.startsWith('ENFORCER'),
+        isPlayer: false,
+        isAtTerminal: e.currentTask?.type === 'USE_TERMINAL',
+        isExtracting: Boolean(e.extractionPending || e.currentTask?.type === 'EXTRACT'),
+      }));
     if (state.playerState.pos.z === z)
-      entityData.push({ x: state.playerState.pos.x, y: state.playerState.pos.y, id: 'PLAYER', isGhost: false, isEnforcer: false, isPlayer: true });
+      entityData.push({
+        x: state.playerState.pos.x, y: state.playerState.pos.y,
+        id: 'PLAYER', isGhost: false, isEnforcer: false, isPlayer: true,
+        isAtTerminal: false, isExtracting: false,
+      });
     s.renderEntityData(entityData);
   }, []);
 
