@@ -59,6 +59,7 @@ interface EntityRenderData {
   isGhost: boolean;
   isEnforcer: boolean;
   isPlayer: boolean;
+  isDormant?: boolean;
   isAtTerminal?: boolean;
   isExtracting?: boolean;
 }
@@ -87,6 +88,10 @@ export class GameScene extends Phaser.Scene {
   preload(): void {
     this.load.spritesheet('tileset', '/assets/tileset.png', { frameWidth: SPRITE_SIZE, frameHeight: SPRITE_SIZE });
     this.load.atlas('chars', '/assets/sprite_pack/chars.png', '/assets/sprite_pack/chars.json');
+    // Grid spritesheets — numeric frame indices work directly (4 cols × N rows, 16×16px)
+    this.load.spritesheet('guard',    '/assets/guard.png',    { frameWidth: 16, frameHeight: 16 });
+    this.load.spritesheet('inspector','/assets/inspector.png',{ frameWidth: 16, frameHeight: 16 });
+    this.load.spritesheet('inmate',   '/assets/inmate.png',   { frameWidth: 16, frameHeight: 16 });
   }
 
   create(): void {
@@ -98,8 +103,32 @@ export class GameScene extends Phaser.Scene {
     this.overlayGraphics = this.add.graphics().setDepth(10);
 
     this.createCharAnimations();
+    this.createGridAnimations();
     this.subscribeToEventBus();
     this.events.emit('scene-ready');
+  }
+
+  // Grid spritesheet animations — 4 cols × N rows, row order: south/north/west/east
+  private createGridAnimations(): void {
+    const mk = (key: string, tex: string, start: number, end: number, rate: number) => {
+      if (!this.anims.exists(key))
+        this.anims.create({ key, frames: this.anims.generateFrameNumbers(tex, { start, end }), frameRate: rate, repeat: -1 });
+    };
+    // guard: 4×7 — rows 0-3 walk (S/N/W/E), row 4 idle, row 5 alert, row 6 attack
+    mk('guard_walk_south', 'guard',  0,  3, 6);
+    mk('guard_walk_north', 'guard',  4,  7, 6);
+    mk('guard_walk_west',  'guard',  8, 11, 6);
+    mk('guard_walk_east',  'guard', 12, 15, 6);
+    mk('guard_idle',       'guard', 16, 19, 4);
+    mk('guard_alert',      'guard', 20, 23, 8);
+    // inspector: 4×8 — rows 0-3 walk (S/N/W/E), row 4 idle, rows 5-7 other
+    mk('inspector_walk_south', 'inspector',  0,  3, 6);
+    mk('inspector_walk_north', 'inspector',  4,  7, 6);
+    mk('inspector_walk_west',  'inspector',  8, 11, 6);
+    mk('inspector_walk_east',  'inspector', 12, 15, 6);
+    mk('inspector_idle',       'inspector', 16, 19, 4);
+    // inmate: 3×1 — frames 0-2 simple walk cycle
+    mk('inmate_walk', 'inmate', 0, 2, 6);
   }
 
   private createCharAnimations(): void {
@@ -117,18 +146,21 @@ export class GameScene extends Phaser.Scene {
     console.log(`[GameScene] registered ${count} char anims, chars texture exists: ${this.textures.exists('chars')}`);
   }
 
+  private getTextureKey(e: EntityRenderData): string {
+    if (e.isPlayer) return 'chars';
+    if (e.isEnforcer) return 'guard';
+    if (e.id === 'EIRA-7') return 'inspector';
+    return 'inmate';
+  }
+
   private selectAnimKey(e: EntityRenderData, facing: string, isMoving = true): string {
     if (e.isPlayer) {
       if (e.isAtTerminal) return `solibarracastro_terminal_${facing}`;
       return isMoving ? `solibarracastro_walkcycle_${facing}` : `solibarracastro_idle_${facing}`;
     }
-    if (e.isEnforcer) return `enforcer_walkcycle_${facing}`;
-    if (e.id === 'EIRA-7') {
-      if (e.isExtracting) return `eira7_runcycle_${facing}`;
-      if (e.isAtTerminal) return `eira7_terminal_${facing}`;
-      return `eira7_walkcycle_${facing}`;
-    }
-    return `eira7_walkcycle_${facing}`;
+    if (e.isEnforcer) return isMoving ? `guard_walk_${facing}` : 'guard_idle';
+    if (e.id === 'EIRA-7') return isMoving ? `inspector_walk_${facing}` : 'inspector_idle';
+    return 'inmate_walk';
   }
 
   private subscribeToEventBus(): void {
@@ -360,6 +392,26 @@ export class GameScene extends Phaser.Scene {
       }
       this.entityLastPos.set(e.id, { x: e.x, y: e.y });
 
+      // Dormant entities: render as a dim bar on the floor (knocked out). Hide their sprite.
+      if (e.isDormant) {
+        this.entitySprites.get(e.id)?.setVisible(false);
+        this.entityBgGfx.fillStyle(e.isEnforcer ? 0xcc4444 : 0x887744, 0.55);
+        this.entityBgGfx.fillRect(
+          e.x * TILE_SIZE + 6,
+          e.y * TILE_SIZE + TILE_SIZE - 8,
+          TILE_SIZE - 12,
+          5,
+        );
+        this.entityBgGfx.fillStyle(0xffffff, 0.15);
+        this.entityBgGfx.fillRect(
+          e.x * TILE_SIZE + TILE_SIZE / 2 - 8,
+          e.y * TILE_SIZE + TILE_SIZE / 2 - 2,
+          16,
+          3,
+        );
+        continue;
+      }
+
       // Subtle indicator dot under each entity (no box — sprite handles the visual)
       const dotColor = e.isPlayer ? 0x00cc99 : e.isEnforcer ? 0xcc2222 : 0x887744;
       this.entityBgGfx.fillStyle(dotColor, e.isGhost ? 0.08 : 0.22);
@@ -369,17 +421,25 @@ export class GameScene extends Phaser.Scene {
         4,
       );
 
+      const texKey = this.getTextureKey(e);
       let sprite = this.entitySprites.get(e.id);
+      // Recreate sprite if texture key changed (entity type reassignment)
+      if (sprite && sprite.texture.key !== texKey) {
+        sprite.destroy();
+        sprite = undefined;
+        this.entitySprites.delete(e.id);
+      }
       if (!sprite) {
         sprite = this.add.sprite(
           e.x * TILE_SIZE + TILE_SIZE / 2,
           e.y * TILE_SIZE + TILE_SIZE / 2,
-          'chars',
+          texKey,
         ).setDepth(5);
         this.entitySprites.set(e.id, sprite);
       }
 
-      sprite.setScale(CHAR_SCALE);
+      // chars atlas frames are 36×36 source → scale 0.9 ≈ 32px; grid sheets are 16×16 → scale 2.0
+      sprite.setScale(texKey === 'chars' ? CHAR_SCALE : 2.0);
       sprite.setAlpha(e.isGhost ? 0.35 : 1.0);
       sprite.setVisible(true);
 

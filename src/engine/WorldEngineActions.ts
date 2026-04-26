@@ -490,6 +490,42 @@ export function drainFlashlightBattery(state: WorldState): void {
   }
 }
 
+// ── ATTACK ────────────────────────────────────────────────────────────────────
+
+const ATTACK_KO_TURNS = 5;
+
+export function attackEntity(state: WorldState, entityId: EntityId): boolean {
+  const entity = state.entities.get(entityId);
+  if (!entity || entity.status !== 'ACTIVE') return false;
+  if (!deductAP(state, 'ATTACK')) return false;
+
+  entity.status = 'DORMANT';
+  entity.dormantUntilTurn = state.turnCount + ATTACK_KO_TURNS;
+
+  // Physical struggle generates noise
+  eventBus.emit('NOISE_EVENT', { origin: state.playerState.pos, intensity: 5, sourceEntityId: undefined });
+
+  // Protocol violation — attacking anyone is always a breach
+  logPlayerViolation(state, 'PHYSICAL_ATTACK', state.playerState.pos);
+
+  // Sacred entity: extra resonance cost
+  const sacred = entity.sacred;
+  if (sacred) {
+    eventBus.emit('ARTICLE_ZERO_VIOLATION', { entityId, action: 'PHYSICAL_ATTACK', turn: state.turnCount });
+  }
+
+  // Alert nearby enforcers
+  for (const e of state.entities.values()) {
+    if (!e.id.startsWith('ENFORCER') || e.pos.z !== state.playerState.pos.z) continue;
+    const dist = Math.abs(e.pos.x - state.playerState.pos.x) + Math.abs(e.pos.y - state.playerState.pos.y);
+    if (dist <= 6) eventBus.emit('ENFORCER_ALERTED', { enforcerId: e.id, origin: state.playerState.pos });
+  }
+
+  eventBus.emit('ENTITY_ATTACKED', { entityId, pos: state.playerState.pos, turn: state.turnCount, sacred });
+  eventBus.emit('ENTITY_STATUS_CHANGED', { entityId, previous: 'ACTIVE', current: 'DORMANT' });
+  return true;
+}
+
 export function tickEMPSuppression(state: WorldState): void {
   for (const [key, turns] of empSuppressed) {
     if (turns <= 1) {

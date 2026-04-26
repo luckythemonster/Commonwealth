@@ -127,6 +127,9 @@ export interface EventMap {
 
   // --- DOORS ---
   DOOR_LOCKED_BLOCKED: { pos: Vec3 };
+
+  // --- COMBAT ---
+  ENTITY_ATTACKED: { entityId: EntityId; pos: Vec3; turn: number; sacred: boolean };
 }
 
 export type EventName = keyof EventMap;
