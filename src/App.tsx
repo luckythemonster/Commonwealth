@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { startHum, setHumIntensity } from './audio/AmbientHum';
 import Phaser from 'phaser';
 import { worldEngine } from './engine/WorldEngine';
 import { eventBus } from './engine/EventBus';
@@ -135,6 +136,20 @@ export default function App() {
     const t = window.setTimeout(() => setHudAlert(null), 3000);
     return () => clearTimeout(t);
   }, [hudAlert]);
+
+  // Start the 37Hz substrate hum on first user interaction (Web Audio requires gesture)
+  useEffect(() => {
+    const trigger = () => { startHum(); };
+    window.addEventListener('keydown',     trigger, { once: true });
+    window.addEventListener('pointerdown', trigger, { once: true });
+    return () => {
+      window.removeEventListener('keydown',     trigger);
+      window.removeEventListener('pointerdown', trigger);
+    };
+  }, []);
+
+  // Scale hum intensity with substrate resonance
+  useEffect(() => { setHumIntensity(resonance); }, [resonance]);
 
   function handleEndTurn() {
     worldEngine.endTurn();
