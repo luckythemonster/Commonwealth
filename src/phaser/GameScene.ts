@@ -6,6 +6,7 @@
 import Phaser from 'phaser';
 import { eventBus } from '../engine/EventBus';
 import type { WorldTile, FloorIndex } from '../types/world.types';
+import { CHAR_ANIMS } from '../data/char-anims';
 
 const TILE_SIZE   = 32;   // display px per tile
 const SPRITE_SIZE = 16;   // source tile sprite px
@@ -84,8 +85,6 @@ export class GameScene extends Phaser.Scene {
 
   preload(): void {
     this.load.spritesheet('tileset', '/assets/tileset.png', { frameWidth: SPRITE_SIZE, frameHeight: SPRITE_SIZE });
-    // Load JSON separately so animations array is available in cache after atlas loads
-    this.load.json('chars-anim', '/assets/sprite_pack/chars.json');
     this.load.atlas('chars', '/assets/sprite_pack/chars.png', '/assets/sprite_pack/chars.json');
   }
 
@@ -103,23 +102,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   private createCharAnimations(): void {
-    const data = this.cache.json.get('chars-anim') as {
-      animations?: Array<{
-        key: string;
-        frameRate: number;
-        repeat: number;
-        frames: Array<{ frame: string }>;
-      }>;
-    } | null;
-    if (!data?.animations) {
-      console.warn('GameScene: chars-anim not found in cache — animations unavailable');
-      return;
-    }
-    for (const anim of data.animations) {
+    for (const anim of CHAR_ANIMS) {
       if (this.anims.exists(anim.key)) continue;
       this.anims.create({
         key: anim.key,
-        frames: anim.frames.map(f => ({ key: 'chars', frame: f.frame })),
+        frames: anim.frames.map(frame => ({ key: 'chars', frame })),
         frameRate: anim.frameRate,
         repeat: anim.repeat,
       });

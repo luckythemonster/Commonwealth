@@ -231,7 +231,13 @@ export default function App() {
 
       {/* ── MAIN LAYOUT ── */}
       <div style={{ display: 'flex', paddingTop: '32px' }}>
-        <div ref={canvasRef} style={{ flex: 1, height: 'calc(100vh - 32px)', overflow: 'hidden' }} />
+        <div ref={canvasRef} style={{
+          flex: 1,
+          height: isMobile
+            ? 'calc(100vh - 32px - 164px - env(safe-area-inset-bottom, 0px))'
+            : 'calc(100vh - 32px)',
+          overflow: 'hidden',
+        }} />
 
         {/* Desktop sidebar — hidden on mobile */}
         {!isMobile && (
