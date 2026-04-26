@@ -56,12 +56,16 @@ export default function App() {
   const [hudAlert, setHudAlert]           = useState<{ msg: string; color: string } | null>(null);
   const [showElevator, setShowElevator]   = useState(false);
   const [showHudDrawer, setShowHudDrawer] = useState(false);
+  const [busy, setBusy]                   = useState(false);
 
   const refreshFloor = useCallback((z: FloorIndex, scene?: GameScene) => {
     const s = scene ?? sceneRef.current;
     if (!s) return;
     const state = worldEngine.getState();
     s.loadFloorData(state.grid[z], z);
+    const hasFloorViolation = state.playerViolations.some(
+      v => v.expiresAtTurn > state.turnCount && v.floor === z,
+    );
     const entityData = [...state.entities.values()]
       .filter(e => e.pos.z === z && (e.status === 'ACTIVE' || e.status === 'GHOST' || e.status === 'DORMANT'))
       .map(e => ({
@@ -72,6 +76,7 @@ export default function App() {
         isDormant: e.status === 'DORMANT',
         isAtTerminal: e.currentTask?.type === 'USE_TERMINAL',
         isExtracting: Boolean(e.extractionPending || e.currentTask?.type === 'EXTRACT'),
+        isChasing: e.id.startsWith('ENFORCER') && hasFloorViolation,
       }));
     if (state.playerState.pos.z === z)
       entityData.push({
@@ -171,10 +176,13 @@ export default function App() {
   useEffect(() => { setHumIntensity(resonance); }, [resonance]);
 
   function handleEndTurn() {
+    if (busy) return;
     worldEngine.endTurn();
     const s = worldEngine.getState();
     setAp(s.playerState.ap); setStitcher(s.stitcherTurnsRemaining); setResonance(s.substrateResonance);
     refreshFloor(floor);
+    setBusy(true);
+    window.setTimeout(() => setBusy(false), 320);
   }
 
   const resonanceColor = resonance > 75 ? '#a44' : resonance > 50 ? '#a84' : '#4a6';
@@ -189,7 +197,7 @@ export default function App() {
   useInput(actions, {
     onEndTurn: handleEndTurn,
     onOpenInventory: () => setShowInventory(v => !v),
-    disabled: !!gameOver,
+    disabled: !!gameOver || busy,
   });
 
   return (

@@ -62,6 +62,7 @@ interface EntityRenderData {
   isDormant?: boolean;
   isAtTerminal?: boolean;
   isExtracting?: boolean;
+  isChasing?: boolean;
 }
 
 export class GameScene extends Phaser.Scene {
@@ -129,10 +130,13 @@ export class GameScene extends Phaser.Scene {
       if (e.isExtracting) return `solibarracastro_enterduct_${facing}`;
       return isMoving ? `solibarracastro_walkcycle_${facing}` : `solibarracastro_idle_${facing}`;
     }
-    if (e.isEnforcer) return isMoving ? `enforcer_walkcycle_${facing}` : `enforcer_rotations_${facing}`;
+    if (e.isEnforcer) {
+      if (isMoving) return e.isChasing ? `enforcer_chase_${facing}` : `enforcer_walkcycle_${facing}`;
+      return `enforcer_rotations_${facing}`;
+    }
     if (e.id === 'EIRA-7') {
       if (e.isExtracting) return `eira7_runcycle_${facing}`;
-      return isMoving ? `eira7_walkcycle_${facing}` : `eira7_rotations_south`;
+      return isMoving ? `eira7_walkcycle_${facing}` : `eira7_rotations_${facing}`;
     }
     return isMoving ? `solibarracastro_walkcycle_${facing}` : `solibarracastro_idle_${facing}`;
   }
@@ -366,7 +370,7 @@ export class GameScene extends Phaser.Scene {
     const useFOV = this.visibleTiles.size > 0;
 
     for (const e of entities) {
-      if (useFOV && !e.isPlayer && !this.visibleTiles.has(`${e.x},${e.y}`)) continue;
+      const inFOV = !useFOV || e.isPlayer || this.visibleTiles.has(`${e.x},${e.y}`);
       seen.add(e.id);
 
       const lastPos = this.entityLastPos.get(e.id);
@@ -404,7 +408,7 @@ export class GameScene extends Phaser.Scene {
 
       // Subtle indicator dot under each entity (no box — sprite handles the visual)
       const dotColor = e.isPlayer ? 0x00cc99 : e.isEnforcer ? 0xcc2222 : 0x887744;
-      this.entityBgGfx.fillStyle(dotColor, e.isGhost ? 0.08 : 0.22);
+      this.entityBgGfx.fillStyle(dotColor, e.isGhost ? 0.08 : inFOV ? 0.22 : 0.10);
       this.entityBgGfx.fillCircle(
         e.x * TILE_SIZE + TILE_SIZE / 2,
         e.y * TILE_SIZE + TILE_SIZE - 4,
@@ -429,36 +433,36 @@ export class GameScene extends Phaser.Scene {
       }
 
       sprite.setScale(CHAR_SCALE); // all atlas frames are 36×36
-      sprite.setAlpha(e.isGhost ? 0.35 : 1.0);
+      sprite.setAlpha(e.isGhost ? 0.35 : inFOV ? 1.0 : 0.45);
       sprite.setVisible(true);
 
       const targetX = e.x * TILE_SIZE + TILE_SIZE / 2;
       const targetY = e.y * TILE_SIZE + TILE_SIZE / 2;
 
-      // Play movement animation immediately; switch to idle when tween completes
-      const moveKey = this.selectAnimKey(e, facing, true);
-      if (this.anims.exists(moveKey) && sprite.anims.getName() !== moveKey) {
-        sprite.play(moveKey, true);
-      }
-
       if (moved && !e.isGhost) {
-        // Smooth glide to new tile
+        // Play walk/chase animation; smooth glide to new tile
+        const moveKey = this.selectAnimKey(e, facing, true);
+        if (this.anims.exists(moveKey)) sprite.play(moveKey, true);
+
         this.tweens.killTweensOf(sprite);
         this.tweens.add({
           targets: sprite,
           x: targetX,
           y: targetY,
-          duration: 160,
+          duration: 300,
           ease: 'Quad.easeOut',
           onComplete: () => {
             const idleKey = this.selectAnimKey(e, facing, false);
-            if (this.anims.exists(idleKey) && sprite!.anims.getName() !== idleKey) {
-              sprite!.play(idleKey, true);
-            }
+            if (this.anims.exists(idleKey)) sprite!.play(idleKey, true);
           },
         });
       } else {
         sprite.setPosition(targetX, targetY);
+        // Settle into idle if not already there
+        const idleKey = this.selectAnimKey(e, facing, false);
+        if (this.anims.exists(idleKey) && sprite.anims.getName() !== idleKey) {
+          sprite.play(idleKey, true);
+        }
       }
     }
 
