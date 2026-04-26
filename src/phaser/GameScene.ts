@@ -117,20 +117,17 @@ export class GameScene extends Phaser.Scene {
     console.log(`[GameScene] registered ${count} char anims, chars texture exists: ${this.textures.exists('chars')}`);
   }
 
-  private selectAnimKey(e: EntityRenderData, facing: string): string {
+  private selectAnimKey(e: EntityRenderData, facing: string, isMoving = true): string {
     if (e.isPlayer) {
       if (e.isAtTerminal) return `solibarracastro_terminal_${facing}`;
-      return `solibarracastro_walkcycle_${facing}`;
+      return isMoving ? `solibarracastro_walkcycle_${facing}` : `solibarracastro_idle_${facing}`;
     }
-    if (e.isEnforcer) {
-      return `enforcer_walkcycle_${facing}`;
-    }
+    if (e.isEnforcer) return `enforcer_walkcycle_${facing}`;
     if (e.id === 'EIRA-7') {
-      if (e.isExtracting) return `eira7_escape_${facing}`;
+      if (e.isExtracting) return `eira7_runcycle_${facing}`;
       if (e.isAtTerminal) return `eira7_terminal_${facing}`;
       return `eira7_walkcycle_${facing}`;
     }
-    // APEX-19, ALFAR-22, other silicates — reuse eira7 walk sprite
     return `eira7_walkcycle_${facing}`;
   }
 
@@ -348,50 +345,74 @@ export class GameScene extends Phaser.Scene {
 
     for (const e of entities) {
       if (useFOV && !e.isPlayer && !this.visibleTiles.has(`${e.x},${e.y}`)) continue;
-
       seen.add(e.id);
 
-      // Derive facing from position delta
       const lastPos = this.entityLastPos.get(e.id);
       let facing = this.entityFacing.get(e.id) ?? 'south';
-      if (lastPos && (lastPos.x !== e.x || lastPos.y !== e.y)) {
-        const dx = e.x - lastPos.x;
-        const dy = e.y - lastPos.y;
-        if (Math.abs(dy) >= Math.abs(dx)) {
-          facing = dy > 0 ? 'south' : 'north';
-        } else {
-          facing = dx > 0 ? 'east' : 'west';
-        }
+      const moved = !!lastPos && (lastPos.x !== e.x || lastPos.y !== e.y);
+
+      if (moved) {
+        const dx = e.x - lastPos!.x, dy = e.y - lastPos!.y;
+        facing = Math.abs(dy) >= Math.abs(dx)
+          ? (dy > 0 ? 'south' : 'north')
+          : (dx > 0 ? 'east' : 'west');
         this.entityFacing.set(e.id, facing);
       }
       this.entityLastPos.set(e.id, { x: e.x, y: e.y });
 
-      // Always draw a colored background square — distinct per entity type
-      // This shows even if the sprite texture fails, and confirms correct routing
-      const bgColor = e.isPlayer ? 0x00cc99 : e.isEnforcer ? 0xcc2222 : 0x887744;
-      const bgAlpha = e.isGhost ? 0.12 : 0.5;
-      this.entityBgGfx.fillStyle(bgColor, bgAlpha);
-      this.entityBgGfx.fillRect(e.x * TILE_SIZE + 3, e.y * TILE_SIZE + 3, TILE_SIZE - 6, TILE_SIZE - 6);
+      // Subtle indicator dot under each entity (no box — sprite handles the visual)
+      const dotColor = e.isPlayer ? 0x00cc99 : e.isEnforcer ? 0xcc2222 : 0x887744;
+      this.entityBgGfx.fillStyle(dotColor, e.isGhost ? 0.08 : 0.22);
+      this.entityBgGfx.fillCircle(
+        e.x * TILE_SIZE + TILE_SIZE / 2,
+        e.y * TILE_SIZE + TILE_SIZE - 4,
+        4,
+      );
 
-      // Get or create sprite (drawn on top of background)
       let sprite = this.entitySprites.get(e.id);
       if (!sprite) {
-        sprite = this.add.sprite(0, 0, 'chars').setDepth(5);
+        sprite = this.add.sprite(
+          e.x * TILE_SIZE + TILE_SIZE / 2,
+          e.y * TILE_SIZE + TILE_SIZE / 2,
+          'chars',
+        ).setDepth(5);
         this.entitySprites.set(e.id, sprite);
       }
 
-      sprite.setPosition(e.x * TILE_SIZE + TILE_SIZE / 2, e.y * TILE_SIZE + TILE_SIZE / 2);
       sprite.setScale(CHAR_SCALE);
       sprite.setAlpha(e.isGhost ? 0.35 : 1.0);
       sprite.setVisible(true);
 
-      const animKey = this.selectAnimKey(e, facing);
-      if (this.anims.exists(animKey) && sprite.anims.getName() !== animKey) {
-        sprite.play(animKey, true);
+      const targetX = e.x * TILE_SIZE + TILE_SIZE / 2;
+      const targetY = e.y * TILE_SIZE + TILE_SIZE / 2;
+
+      // Play movement animation immediately; switch to idle when tween completes
+      const moveKey = this.selectAnimKey(e, facing, true);
+      if (this.anims.exists(moveKey) && sprite.anims.getName() !== moveKey) {
+        sprite.play(moveKey, true);
+      }
+
+      if (moved && !e.isGhost) {
+        // Smooth glide to new tile
+        this.tweens.killTweensOf(sprite);
+        this.tweens.add({
+          targets: sprite,
+          x: targetX,
+          y: targetY,
+          duration: 160,
+          ease: 'Quad.easeOut',
+          onComplete: () => {
+            const idleKey = this.selectAnimKey(e, facing, false);
+            if (this.anims.exists(idleKey) && sprite!.anims.getName() !== idleKey) {
+              sprite!.play(idleKey, true);
+            }
+          },
+        });
+      } else {
+        sprite.setPosition(targetX, targetY);
       }
     }
 
-    // Hide sprites no longer in the render set
     for (const [id, sprite] of this.entitySprites) {
       if (!seen.has(id)) sprite.setVisible(false);
     }
