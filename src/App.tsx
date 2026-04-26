@@ -424,7 +424,7 @@ export default function App() {
         </div>
       )}
 
-      {gameOver && createPortal(
+      {detained && createPortal(
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
           background: 'rgba(2, 4, 6, 0.97)',
@@ -443,10 +443,10 @@ export default function App() {
               DETAINED
             </div>
             <div style={{ color: '#7a9aaa', fontSize: '11px', lineHeight: '2', marginBottom: '28px' }}>
-              <div>DETAINING UNIT&nbsp;&nbsp;&nbsp;{gameOver.enforcerId}</div>
-              <div>FLOOR&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{String(gameOver.floor).padStart(2, '0')}</div>
-              <div>TURN&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{gameOver.turn}</div>
-              <div>VIOLATION COUNT&nbsp;&nbsp;{worldEngine.getState().playerViolations.length}</div>
+              <div>DETAINING UNIT&nbsp;&nbsp;&nbsp;{gameOver?.enforcerId ?? '—'}</div>
+              <div>FLOOR&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{gameOver ? String(gameOver.floor).padStart(2, '0') : String(floor).padStart(2, '0')}</div>
+              <div>TURN&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;{gameOver?.turn ?? '—'}</div>
+              <div>VIOLATION COUNT&nbsp;&nbsp;{worldEngine.getState().playerViolations?.length ?? 0}</div>
               <div>STITCHER CLOCK&nbsp;&nbsp;&nbsp;{stitcher}t REMAINING</div>
             </div>
             <div style={{ color: '#4a5a5a', fontSize: '10px', marginBottom: '24px', lineHeight: '1.6' }}>
