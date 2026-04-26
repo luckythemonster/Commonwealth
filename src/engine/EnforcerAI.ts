@@ -336,6 +336,14 @@ function moveEnforcer(entity: Entity, to: Vec3, state: WorldState): void {
   const toTile = state.grid[to.z]?.[to.y]?.[to.x];
   if (!toTile || toTile.type === 'WALL' || toTile.type === 'VOID') return;
 
+  // NPC-NPC collision: don't move onto a tile occupied by another active entity
+  const blocked = toTile.entityIds.some(id => {
+    if (id === entity.id) return false;
+    const other = state.entities.get(id);
+    return other && other.status === 'ACTIVE';
+  });
+  if (blocked) return;
+
   const from    = { ...entity.pos };
   const fromTile = state.grid[entity.pos.z]?.[entity.pos.y]?.[entity.pos.x];
   if (fromTile) fromTile.entityIds = fromTile.entityIds.filter(id => id !== entity.id);

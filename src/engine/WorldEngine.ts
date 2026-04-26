@@ -20,7 +20,7 @@ import {
   rapportMode1, rapportMode2, toggleDoor, updateFOV,
   pickupItem, useItem, drainFlashlightBattery, tickEMPSuppression,
   toggleLightSource, logPlayerViolation, useElevator, unlockDoorWithKey,
-  bfsStep,
+  bfsStep, attackEntity,
 } from './WorldEngineActions';
 import type {
   WorldState, Entity, EntityId, FloorIndex, Vec3, ActionType, CitationEntry, ViolationType,
@@ -100,8 +100,18 @@ export class WorldEngine {
 
   private resolveAllLevels(): void {
     for (const entity of this.state.entities.values()) {
+      this.tickEntityDormancy(entity);
       if (entity.status !== 'ACTIVE') continue;
       this.resolveEntity(entity);
+    }
+  }
+
+  private tickEntityDormancy(entity: Entity): void {
+    if (entity.status !== 'DORMANT' || entity.dormantUntilTurn === undefined) return;
+    if (this.state.turnCount >= entity.dormantUntilTurn) {
+      entity.status = 'ACTIVE';
+      entity.dormantUntilTurn = undefined;
+      eventBus.emit('ENTITY_STATUS_CHANGED', { entityId: entity.id, previous: 'DORMANT', current: 'ACTIVE' });
     }
   }
 
@@ -282,6 +292,13 @@ export class WorldEngine {
     const fromTile = this.state.grid[entity.pos.z]?.[entity.pos.y]?.[entity.pos.x];
     const toTile   = this.state.grid[to.z]?.[to.y]?.[to.x];
     if (!toTile || toTile.type === 'WALL' || toTile.type === 'VOID') return;
+    // NPC-NPC collision: don't move onto a tile occupied by another active entity
+    const blocked = toTile.entityIds.some(id => {
+      if (id === entity.id) return false;
+      const other = this.state.entities.get(id);
+      return other && other.status === 'ACTIVE';
+    });
+    if (blocked) return;
     if (fromTile) fromTile.entityIds = fromTile.entityIds.filter(id => id !== entity.id);
     const prev = { ...entity.pos };
     entity.pos = to;
@@ -590,6 +607,7 @@ export class WorldEngine {
   deductAction(action: ActionType) { return deductAP(this.state, action); }
   pickup(pos: Vec3) { return pickupItem(this.state, pos); }
   useItem(itemId: string, targetPos?: Vec3) { return useItem(this.state, itemId, targetPos); }
+  attack(entityId: EntityId) { return attackEntity(this.state, entityId); }
 
   private buildBehaviorSample() {
     return {

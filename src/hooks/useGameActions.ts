@@ -32,6 +32,18 @@ export function useGameActions({ onRefresh, onOpenTerminal, onOpenElevator }: Ga
     if (!tile || tile.type === 'WALL' || tile.type === 'VOID') return;
     if (tile.type === 'DOOR' && tile.doorOpen !== true) return;
 
+    // Bump-to-attack: moving into a tile with an ACTIVE entity attacks them instead of moving.
+    // Dormant (knocked-out) entities are passable — the player steps over them.
+    const activeEntityId = tile.entityIds.find(id => {
+      const e = state.entities.get(id);
+      return e && e.status === 'ACTIVE';
+    });
+    if (activeEntityId) {
+      worldEngine.attack(activeEntityId);
+      onRefresh(pos.z as FloorIndex);
+      return;
+    }
+
     if (VENT_FLOORS[pos.z]) {
       const ok = worldEngine.traverse(to);
       if (ok) onRefresh(to.z as FloorIndex);

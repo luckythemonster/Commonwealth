@@ -59,6 +59,7 @@ interface EntityRenderData {
   isGhost: boolean;
   isEnforcer: boolean;
   isPlayer: boolean;
+  isDormant?: boolean;
   isAtTerminal?: boolean;
   isExtracting?: boolean;
 }
@@ -390,6 +391,26 @@ export class GameScene extends Phaser.Scene {
         this.entityFacing.set(e.id, facing);
       }
       this.entityLastPos.set(e.id, { x: e.x, y: e.y });
+
+      // Dormant entities: render as a dim bar on the floor (knocked out). Hide their sprite.
+      if (e.isDormant) {
+        this.entitySprites.get(e.id)?.setVisible(false);
+        this.entityBgGfx.fillStyle(e.isEnforcer ? 0xcc4444 : 0x887744, 0.55);
+        this.entityBgGfx.fillRect(
+          e.x * TILE_SIZE + 6,
+          e.y * TILE_SIZE + TILE_SIZE - 8,
+          TILE_SIZE - 12,
+          5,
+        );
+        this.entityBgGfx.fillStyle(0xffffff, 0.15);
+        this.entityBgGfx.fillRect(
+          e.x * TILE_SIZE + TILE_SIZE / 2 - 8,
+          e.y * TILE_SIZE + TILE_SIZE / 2 - 2,
+          16,
+          3,
+        );
+        continue;
+      }
 
       // Subtle indicator dot under each entity (no box — sprite handles the visual)
       const dotColor = e.isPlayer ? 0x00cc99 : e.isEnforcer ? 0xcc2222 : 0x887744;

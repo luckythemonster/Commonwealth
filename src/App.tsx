@@ -62,12 +62,13 @@ export default function App() {
     const state = worldEngine.getState();
     s.loadFloorData(state.grid[z], z);
     const entityData = [...state.entities.values()]
-      .filter(e => e.pos.z === z)
+      .filter(e => e.pos.z === z && (e.status === 'ACTIVE' || e.status === 'GHOST' || e.status === 'DORMANT'))
       .map(e => ({
         x: e.pos.x, y: e.pos.y, id: e.id,
         isGhost: e.isGhost,
         isEnforcer: e.id.startsWith('ENFORCER'),
         isPlayer: false,
+        isDormant: e.status === 'DORMANT',
         isAtTerminal: e.currentTask?.type === 'USE_TERMINAL',
         isExtracting: Boolean(e.extractionPending || e.currentTask?.type === 'EXTRACT'),
       }));
@@ -124,6 +125,11 @@ export default function App() {
       }),
       eventBus.on('PLAYER_MOVED',                 ({ to }) => { setFloor(to.z as FloorIndex); refreshFloor(to.z as FloorIndex); }),
       eventBus.on('TURN_END',                     () => refreshFloor(floor)),
+      eventBus.on('ENTITY_ATTACKED',              ({ entityId, sacred }) => {
+        const label = (sacred as boolean) ? `■ ATTACK — SACRED ENTITY: ${entityId as string}` : `■ ATTACK: ${entityId as string} KO`;
+        setHudAlert({ msg: label, color: (sacred as boolean) ? '#c44' : '#a84' });
+        refreshFloor(floor);
+      }),
       eventBus.on('VIOLATION_LOGGED',             ({ type }) => setHudAlert({ msg: `■ INFRACTION: ${type}`, color: '#a84' })),
       eventBus.on('ELEVATOR_ACCESS_DENIED',       ({ requiredKey }) => setHudAlert({ msg: `■ ACCESS DENIED — ${requiredKey as string}`, color: '#a44' })),
       eventBus.on('LIGHT_SOURCE_TOGGLED',         ({ floor: f }) => { if ((f as number) === floor) refreshFloor(floor); }),

@@ -142,7 +142,8 @@ export type ViolationType =
   | 'VENT4_TAMPERING'
   | 'RESTRICTED_ZONE'
   | 'LOCKPICK_USE'
-  | 'ITEM_THEFT';
+  | 'ITEM_THEFT'
+  | 'PHYSICAL_ATTACK';
 
 export interface PlayerViolation {
   id: string;
@@ -220,6 +221,9 @@ export interface Entity {
   // Extraction
   farewellText?: string;
   extractionPending?: boolean;
+
+  // Knock-out state — set by ATTACK action; entity returns to ACTIVE when turn reaches this value
+  dormantUntilTurn?: number;
 }
 
 export interface WorldState {
@@ -254,6 +258,7 @@ export type ActionType =
   | 'TARGETED_PRUNE'
   | 'GRACEFUL_SHUTDOWN'
   | 'HARD_SHUTDOWN'
+  | 'ATTACK'
   | 'MODULATE_AIRFLOW'
   | 'CLEAR_BLOCKAGE'
   | 'SEAL_VENT'
@@ -274,6 +279,7 @@ export const AP_COST: Record<ActionType, number> = {
   TARGETED_PRUNE: 3,      // Requires MAINTENANCE_KEY
   GRACEFUL_SHUTDOWN: 2,
   HARD_SHUTDOWN: 0,
+  ATTACK: 1,              // Knock out an entity for 5 turns; PHYSICAL_ATTACK violation logged
   MODULATE_AIRFLOW: 2,
   CLEAR_BLOCKAGE: 1,
   SEAL_VENT: 1,
