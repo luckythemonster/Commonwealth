@@ -566,6 +566,16 @@ export function attackEntity(state: WorldState, entityId: EntityId): boolean {
 
   eventBus.emit('ENTITY_ATTACKED', { entityId, pos: state.playerState.pos, turn: state.turnCount, sacred });
   eventBus.emit('ENTITY_STATUS_CHANGED', { entityId, previous: 'ACTIVE', current: 'DORMANT' });
+
+  // Any physical assault with an active enforcer on the floor = immediate detention.
+  // Sol is a vent technician — violence in front of security ends the run.
+  const witness = Array.from(state.entities.values()).find(
+    e => e.id.startsWith('ENFORCER') && e.status === 'ACTIVE' && e.pos.z === state.playerState.pos.z,
+  );
+  if (witness) {
+    eventBus.emit('PLAYER_DETAINED', { enforcerId: witness.id, turn: state.turnCount });
+  }
+
   return true;
 }
 
