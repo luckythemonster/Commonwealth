@@ -6,6 +6,8 @@
 import Phaser from 'phaser';
 import { eventBus } from '../engine/EventBus';
 import type { WorldTile, FloorIndex } from '../types/world.types';
+import { CHAR_ANIMS } from '../data/char-anims';
+// CHAR_ANIMS uses hash string frame IDs that match the filename fields in chars.json exactly.
 
 const TILE_SIZE   = 32;   // display px per tile
 const SPRITE_SIZE = 16;   // source tile sprite px
@@ -84,11 +86,7 @@ export class GameScene extends Phaser.Scene {
 
   preload(): void {
     this.load.spritesheet('tileset', '/assets/tileset.png', { frameWidth: SPRITE_SIZE, frameHeight: SPRITE_SIZE });
-    this.load.atlas(
-      'chars',
-      '/assets/sprite_pack/EIRA-7,_Enforcer,_Sol.png',
-      '/assets/sprite_pack/EIRA-7,_Enforcer,_Sol.json',
-    );
+    this.load.atlas('chars', '/assets/sprite_pack/chars.png', '/assets/sprite_pack/chars.json');
   }
 
   create(): void {
@@ -105,27 +103,18 @@ export class GameScene extends Phaser.Scene {
   }
 
   private createCharAnimations(): void {
-    const data = this.cache.json.get('chars') as {
-      animations?: Array<{
-        key: string;
-        frameRate: number;
-        repeat: number;
-        frames: Array<{ frame: string }>;
-      }>;
-    } | null;
-    if (!data?.animations) {
-      console.warn('GameScene: char atlas animation data not found in cache');
-      return;
-    }
-    for (const anim of data.animations) {
+    let count = 0;
+    for (const anim of CHAR_ANIMS) {
       if (this.anims.exists(anim.key)) continue;
       this.anims.create({
         key: anim.key,
-        frames: anim.frames.map(f => ({ key: 'chars', frame: f.frame })),
+        frames: anim.frames.map(name => ({ key: 'chars', frame: name })),
         frameRate: anim.frameRate,
         repeat: anim.repeat,
       });
+      count++;
     }
+    console.log(`[GameScene] registered ${count} char anims, chars texture exists: ${this.textures.exists('chars')}`);
   }
 
   private selectAnimKey(e: EntityRenderData, facing: string): string {
@@ -377,14 +366,14 @@ export class GameScene extends Phaser.Scene {
       }
       this.entityLastPos.set(e.id, { x: e.x, y: e.y });
 
-      // Ghost background indicator
-      if (e.isGhost) {
-        const bgColor = e.isPlayer ? 0x00cc99 : e.isEnforcer ? 0xcc2222 : 0x887744;
-        this.entityBgGfx.fillStyle(bgColor, 0.12);
-        this.entityBgGfx.fillRect(e.x * TILE_SIZE + 3, e.y * TILE_SIZE + 3, TILE_SIZE - 6, TILE_SIZE - 6);
-      }
+      // Always draw a colored background square — distinct per entity type
+      // This shows even if the sprite texture fails, and confirms correct routing
+      const bgColor = e.isPlayer ? 0x00cc99 : e.isEnforcer ? 0xcc2222 : 0x887744;
+      const bgAlpha = e.isGhost ? 0.12 : 0.5;
+      this.entityBgGfx.fillStyle(bgColor, bgAlpha);
+      this.entityBgGfx.fillRect(e.x * TILE_SIZE + 3, e.y * TILE_SIZE + 3, TILE_SIZE - 6, TILE_SIZE - 6);
 
-      // Get or create sprite
+      // Get or create sprite (drawn on top of background)
       let sprite = this.entitySprites.get(e.id);
       if (!sprite) {
         sprite = this.add.sprite(0, 0, 'chars').setDepth(5);

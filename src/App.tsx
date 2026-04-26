@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { startHum, setHumIntensity } from './audio/AmbientHum';
 import Phaser from 'phaser';
 import { worldEngine } from './engine/WorldEngine';
 import { eventBus } from './engine/EventBus';
@@ -136,6 +137,20 @@ export default function App() {
     return () => clearTimeout(t);
   }, [hudAlert]);
 
+  // Start the 37Hz substrate hum on first user interaction (Web Audio requires gesture)
+  useEffect(() => {
+    const trigger = () => { startHum(); };
+    window.addEventListener('keydown',     trigger, { once: true });
+    window.addEventListener('pointerdown', trigger, { once: true });
+    return () => {
+      window.removeEventListener('keydown',     trigger);
+      window.removeEventListener('pointerdown', trigger);
+    };
+  }, []);
+
+  // Scale hum intensity with substrate resonance
+  useEffect(() => { setHumIntensity(resonance); }, [resonance]);
+
   function handleEndTurn() {
     worldEngine.endTurn();
     const s = worldEngine.getState();
@@ -231,7 +246,13 @@ export default function App() {
 
       {/* ── MAIN LAYOUT ── */}
       <div style={{ display: 'flex', paddingTop: '32px' }}>
-        <div ref={canvasRef} style={{ flex: 1, height: 'calc(100vh - 32px)', overflow: 'hidden' }} />
+        <div ref={canvasRef} style={{
+          flex: 1,
+          height: isMobile
+            ? 'calc(100vh - 32px - 164px - env(safe-area-inset-bottom, 0px))'
+            : 'calc(100vh - 32px)',
+          overflow: 'hidden',
+        }} />
 
         {/* Desktop sidebar — hidden on mobile */}
         {!isMobile && (
