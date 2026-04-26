@@ -163,17 +163,15 @@ export function tickEnforcer(entity: Entity, state: WorldState): void {
                + Math.abs(entity.pos.y - state.playerState.pos.y);
 
     if (hasViolation) {
-      // Active violation: full chase, detention on contact
+      // Active violation: full pursuit — detention fires in moveEnforcer on contact
       checkDetectionConsequences(entity, state);
       const next = bfsStep(entity.pos, state.playerState.pos, state, true);
       if (next) moveEnforcer(entity, next, state);
     } else {
-      // No violations yet: pursue but stop 2 tiles away (shadow / warn)
-      // Still fires PLAYER_DETECTED so the HUD shows ■ DETECTED
+      // No violations: shadow at 2 tiles — warn but don't detain
       if (dist <= 2) {
         eventBus.emit('PLAYER_DETECTED', { enforcerId: entity.id, pos: entity.pos });
-      }
-      if (dist > 2) {
+      } else {
         const next = bfsStep(entity.pos, state.playerState.pos, state, true);
         if (next) moveEnforcer(entity, next, state);
       }
@@ -330,6 +328,17 @@ function checkDetectionConsequences(enforcer: Entity, state: WorldState): void {
 function moveEnforcer(entity: Entity, to: Vec3, state: WorldState): void {
   const toTile = state.grid[to.z]?.[to.y]?.[to.x];
   if (!toTile || toTile.type === 'WALL' || toTile.type === 'VOID') return;
+
+  // Interception: enforcer steps onto player's tile → immediate detention
+  const p = state.playerState;
+  if (to.x === p.pos.x && to.y === p.pos.y && to.z === p.pos.z) {
+    p.ap = 0;
+    p.complianceStatus = 'RED';
+    state.substrateResonance = Math.min(100, state.substrateResonance + 8);
+    state.stitcherTurnsRemaining = Math.max(0, state.stitcherTurnsRemaining - 5);
+    eventBus.emit('PLAYER_DETAINED', { enforcerId: entity.id, turn: state.turnCount });
+    return;
+  }
 
   // NPC-NPC collision: don't move onto a tile occupied by another active entity
   const blocked = toTile.entityIds.some(id => {
