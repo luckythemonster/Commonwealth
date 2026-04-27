@@ -6,8 +6,8 @@
 
 import type { WorldTile, TileType } from '../types/world.types';
 
-const FLOOR_WIDTH = 20;
-const FLOOR_HEIGHT = 14;
+const FLOOR_WIDTH = 40;
+const FLOOR_HEIGHT = 28;
 
 function makeTile(
   x: number,

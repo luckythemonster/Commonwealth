@@ -9,8 +9,8 @@ import { CHAR_ANIMS } from '../data/char-anims';
 import type { WorldTile, FloorIndex } from '../types/world.types';
 
 const TILE_SIZE = 32;
-const WORLD_W   = 20 * TILE_SIZE; // 640
-const WORLD_H   = 14 * TILE_SIZE; // 448
+const WORLD_W   = 40 * TILE_SIZE; // 1280
+const WORLD_H   = 28 * TILE_SIZE; // 896
 
 const TILE_COLORS: Record<string, number> = {
   FLOOR:              0x3c4450,
