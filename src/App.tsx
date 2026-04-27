@@ -9,6 +9,7 @@ import { VentilationReport } from './components/VentilationReport';
 import { TouchControls } from './components/TouchControls';
 import { gameActions } from './hooks/useGameActions';
 import { useMobile } from './hooks/useMobile';
+import { parseTiledMap } from './utils/parseTiledMap';
 import type { SubjectivityBelief, FloorIndex, WorldState, Item, ItemType } from './types/world.types';
 
 const FLOOR_LABELS: Record<number, string> = {
@@ -92,7 +93,17 @@ export default function App() {
     game.events.once('ready', () => {
       const scene = game.scene.getScene('GameScene') as GameScene;
       sceneRef.current = scene;
-      scene.events.once('scene-ready', () => refreshFloor(4));
+      scene.events.once('scene-ready', () => {
+        refreshFloor(4);
+        // Try to load the user's Tiled test map; silently skip if missing.
+        fetch('/assets/maps/test.json')
+          .then(r => r.ok ? r.json() : Promise.reject())
+          .then(mapJson => {
+            const parsed = parseTiledMap(mapJson, floorRef.current);
+            scene.loadTiledGids(parsed.gidGrid, floorRef.current, parsed.firstgid, parsed.tilesetColumns);
+          })
+          .catch(() => { /* no test.json → use solid-color tiles */ });
+      });
     });
     return () => game.destroy(true);
   // eslint-disable-next-line react-hooks/exhaustive-deps

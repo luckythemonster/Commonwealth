@@ -65,6 +65,13 @@ export class GameScene extends Phaser.Scene {
   private hudAlert!:    Phaser.GameObjects.Text;
   private complianceDot!: Phaser.GameObjects.Graphics;
 
+  // Tiled tileset rendering
+  private tiledRT!:       Phaser.GameObjects.RenderTexture;
+  private tiledGidGrid:   number[][] | null = null;
+  private tiledFloor:     number | null     = null;
+  private tiledFirstgid   = 1;
+  private tiledColumns    = 4;
+
   // State
   private currentFloor: FloorIndex = 4;
   private currentTiles: WorldTile[][] = [];
@@ -93,6 +100,12 @@ export class GameScene extends Phaser.Scene {
   constructor() { super({ key: 'GameScene' }); }
 
   preload(): void {
+    // User Tiled tileset — placed at public/assets/maps/tileset.png
+    // Missing file logs a 404 and is skipped; solid-color fallback stays active.
+    this.load.spritesheet('user_tileset', '/assets/maps/tileset.png', {
+      frameWidth: 32, frameHeight: 32,
+    });
+
     // Attempt to load all character atlases. Missing files log a 404 and are skipped gracefully.
     // Place {key}.png + {key}.json in public/assets/sprite_pack/ to activate sprites.
     const ATLASES = [
@@ -109,6 +122,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   create(): void {
+    // Tiled tileset render texture — sits behind everything (depth -1)
+    this.tiledRT = this.add.renderTexture(0, 0, WORLD_W, WORLD_H).setDepth(-1);
+
     // World layers
     this.tileGfx      = this.add.graphics().setDepth(0);
     this.tileDecorGfx = this.add.graphics().setDepth(1);
@@ -181,6 +197,35 @@ export class GameScene extends Phaser.Scene {
   renderEntityData(entities: EntityRenderData[]): void {
     this.currentEntities = entities;
     this.renderEntities();
+  }
+
+  loadTiledGids(
+    gidGrid: number[][],
+    floor: number,
+    firstgid = 1,
+    columns  = 4,
+  ): void {
+    this.tiledGidGrid = gidGrid;
+    this.tiledFloor   = floor;
+    this.tiledFirstgid = firstgid;
+    this.tiledColumns  = columns;
+    this.bakeTiledRT();
+  }
+
+  private bakeTiledRT(): void {
+    if (!this.tiledGidGrid) return;
+    if (!this.textures.exists('user_tileset')) return;
+    this.tiledRT.clear();
+    for (let y = 0; y < this.tiledGidGrid.length; y++) {
+      const row = this.tiledGidGrid[y];
+      if (!row) continue;
+      for (let x = 0; x < row.length; x++) {
+        const gid = row[x];
+        if (!gid) continue;
+        const frame = gid - this.tiledFirstgid; // 0-based frame index
+        this.tiledRT.stamp('user_tileset', frame, x * TILE_SIZE, y * TILE_SIZE);
+      }
+    }
   }
 
   // ── EVENTBUS ──────────────────────────────────────────────────────────────
@@ -344,6 +389,11 @@ export class GameScene extends Phaser.Scene {
     tg.clear();
     g.clear();
 
+    // When a Tiled tileset is active for this floor, show/hide the RT and skip solid fills.
+    const useTileset = this.tiledGidGrid !== null && this.tiledFloor === this.currentFloor
+      && this.textures.exists('user_tileset');
+    this.tiledRT.setVisible(useTileset);
+
     for (let y = 0; y < this.currentTiles.length; y++) {
       const row = this.currentTiles[y];
       if (!row) continue;
@@ -353,10 +403,12 @@ export class GameScene extends Phaser.Scene {
         const px = x * TILE_SIZE;
         const py = y * TILE_SIZE;
 
-        // Base solid-color fill
-        const baseColor = TILE_COLORS[tile.type] ?? 0x080c10;
-        tg.fillStyle(baseColor, 1.0);
-        tg.fillRect(px, py, TILE_SIZE, TILE_SIZE);
+        if (!useTileset) {
+          // Base solid-color fill (fallback when no tileset)
+          const baseColor = TILE_COLORS[tile.type] ?? 0x080c10;
+          tg.fillStyle(baseColor, 1.0);
+          tg.fillRect(px, py, TILE_SIZE, TILE_SIZE);
+        }
 
         // DOOR: dynamic state rendering
         if (tile.type === 'DOOR') {
