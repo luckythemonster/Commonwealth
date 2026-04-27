@@ -126,7 +126,7 @@ export class GameScene extends Phaser.Scene {
     const cam = this.cameras.main;
     cam.setBounds(0, 0, WORLD_W, WORLD_H);
     cam.startFollow(this.solTracker, true, 0.1, 0.1);
-    cam.setZoom(1);
+    cam.setZoom(2);
 
     // Diegetic HUD — setScrollFactor(0) keeps them viewport-fixed
     this.hudFloor = this.add.text(8, 4, 'F:02', {
