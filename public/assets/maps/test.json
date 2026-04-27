@@ -368,8 +368,8 @@
         7,
         7,
         7,
-        7,
-        7,
+        8,
+        11,
         7,
         7,
         7,
@@ -388,8 +388,8 @@
         7,
         7,
         7,
-        7,
-        7,
+        3,
+        6,
         7,
         7,
         7,
@@ -592,6 +592,13 @@
   ],
   "nextlayerid": 3,
   "orientation": "orthogonal",
+  "properties": [
+    {
+      "name": "level",
+      "type": "int",
+      "value": 1
+    }
+  ],
   "renderorder": "right-down",
   "tileheight": 32,
   "tilewidth": 32,
@@ -636,14 +643,14 @@
           "id": 1,
           "properties": [
             {
-              "name": "collideLeft",
-              "type": "bool",
-              "value": true
-            },
-            {
               "name": "class",
               "type": "string",
               "value": "floor"
+            },
+            {
+              "name": "collideLeft",
+              "type": "bool",
+              "value": true
             }
           ]
         },
@@ -661,14 +668,19 @@
           "id": 3,
           "properties": [
             {
-              "name": "collideUp",
-              "type": "bool",
-              "value": true
-            },
-            {
               "name": "class",
               "type": "string",
               "value": "floor"
+            },
+            {
+              "name": "collideLeft",
+              "type": "bool",
+              "value": false
+            },
+            {
+              "name": "collideUp",
+              "type": "bool",
+              "value": true
             }
           ]
         },
@@ -746,6 +758,11 @@
               "value": "floor"
             },
             {
+              "name": "collideUp",
+              "type": "bool",
+              "value": false
+            },
+            {
               "name": "collideLeft",
               "type": "bool",
               "value": true
@@ -786,14 +803,14 @@
           "id": 11,
           "properties": [
             {
-              "name": "class",
-              "type": "string",
-              "value": "floor"
-            },
-            {
               "name": "collideRight",
               "type": "bool",
               "value": true
+            },
+            {
+              "name": "class",
+              "type": "string",
+              "value": "floor"
             }
           ]
         },
@@ -841,12 +858,12 @@
               "value": "floor"
             },
             {
-              "name": "collideUp",
+              "name": "collideLeft",
               "type": "bool",
               "value": true
             },
             {
-              "name": "collideLeft",
+              "name": "collideUp",
               "type": "bool",
               "value": true
             }
@@ -858,17 +875,32 @@
             {
               "name": "class",
               "type": "string",
-              "value": "door"
+              "value": "wall"
             },
             {
-              "name": "collideLeft",
+              "name": "collides",
               "type": "bool",
               "value": true
+            },
+            {
+              "name": "collideUp",
+              "type": "bool",
+              "value": false
             },
             {
               "name": "collideDown",
               "type": "bool",
-              "value": true
+              "value": false
+            },
+            {
+              "name": "collideLeft",
+              "type": "bool",
+              "value": false
+            },
+            {
+              "name": "collideRight",
+              "type": "bool",
+              "value": false
             }
           ]
         },
@@ -876,14 +908,29 @@
           "id": 15,
           "properties": [
             {
+              "name": "collideRight",
+              "type": "bool",
+              "value": true
+            },
+            {
               "name": "collideDown",
               "type": "bool",
               "value": true
             },
             {
-              "name": "collideRight",
+              "name": "collideLeft",
               "type": "bool",
-              "value": true
+              "value": false
+            },
+            {
+              "name": "collideUp",
+              "type": "bool",
+              "value": false
+            },
+            {
+              "name": "collides",
+              "type": "bool",
+              "value": false
             },
             {
               "name": "class",
