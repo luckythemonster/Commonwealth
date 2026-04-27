@@ -35,8 +35,14 @@ function getTileClass(tile: TiledTile | undefined): string {
 }
 
 function classToType(cls: string): TileType {
-  if (cls === 'wall') return 'WALL';
-  if (cls === 'door') return 'DOOR';
+  if (cls === 'wall')         return 'WALL';
+  if (cls === 'door')         return 'DOOR';
+  if (cls === 'stairwell')    return 'STAIRWELL';
+  if (cls === 'vent_entry')   return 'VENT_ENTRY';
+  if (cls === 'elevator')     return 'ELEVATOR';
+  if (cls === 'lattice_exit') return 'LATTICE_EXIT';
+  if (cls === 'light_source') return 'LIGHT_SOURCE';
+  if (cls === 'terminal')     return 'TERMINAL';
   return 'FLOOR';
 }
 

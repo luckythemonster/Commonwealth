@@ -238,7 +238,12 @@ function doPatrol(entity: Entity, state: WorldState): void {
     route.currentIndex = (route.currentIndex + 1) % route.waypoints.length;
   }
   const next = bfsStep(entity.pos, route.waypoints[route.currentIndex], state, true);
-  if (next) moveEnforcer(entity, next, state);
+  if (next) {
+    moveEnforcer(entity, next, state);
+  } else {
+    // Waypoint unreachable (e.g. inside a Tiled wall) — skip to next
+    route.currentIndex = (route.currentIndex + 1) % route.waypoints.length;
+  }
 }
 
 function crossFloorChase(entity: Entity, state: WorldState): void {
