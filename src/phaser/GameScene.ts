@@ -210,6 +210,7 @@ export class GameScene extends Phaser.Scene {
     this.tiledFirstgid = firstgid;
     this.tiledColumns  = columns;
     this.bakeTiledRT();
+    this.renderTiles();
   }
 
   private bakeTiledRT(): void {
@@ -412,14 +413,16 @@ export class GameScene extends Phaser.Scene {
 
         // DOOR: dynamic state rendering
         if (tile.type === 'DOOR') {
-          if (tile.doorOpen) {
-            g.fillStyle(0x3a2008, 0.55);
-          } else {
-            g.fillStyle(0x8b5a14, 0.9);
-            g.lineStyle(2, 0xccaa44, 0.8);
-            g.strokeRect(px + 3, py + 3, TILE_SIZE - 6, TILE_SIZE - 6);
+          if (!useTileset) {
+            if (tile.doorOpen) {
+              g.fillStyle(0x3a2008, 0.55);
+            } else {
+              g.fillStyle(0x8b5a14, 0.9);
+              g.lineStyle(2, 0xccaa44, 0.8);
+              g.strokeRect(px + 3, py + 3, TILE_SIZE - 6, TILE_SIZE - 6);
+            }
+            g.fillRect(px, py, TILE_SIZE, TILE_SIZE);
           }
-          g.fillRect(px, py, TILE_SIZE, TILE_SIZE);
           if (tile.locked && !tile.doorOpen) {
             const cx = px + TILE_SIZE / 2;
             const cy = py + TILE_SIZE / 2;
@@ -429,8 +432,8 @@ export class GameScene extends Phaser.Scene {
           }
         }
 
-        // WALL: subtle inner stroke for depth
-        if (tile.type === 'WALL') {
+        // WALL: subtle inner stroke for depth (skip when tileset handles visuals)
+        if (tile.type === 'WALL' && !useTileset) {
           g.lineStyle(1, 0x0a0e18, 0.5);
           g.strokeRect(px, py, TILE_SIZE, TILE_SIZE);
         }
