@@ -405,6 +405,11 @@ export class GameScene extends Phaser.Scene {
         const px = x * TILE_SIZE;
         const py = y * TILE_SIZE;
 
+        // When user tileset is active, all visuals come from the RT.
+        // WorldEngine decor positions are based on map-data.ts which doesn't
+        // match the Tiled layout, so skip all overlays to avoid phantom squares.
+        if (useTileset) continue;
+
         if (!useTileset) {
           // Base solid-color fill (fallback when no tileset)
           const baseColor = TILE_COLORS[tile.type] ?? 0x080c10;

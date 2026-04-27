@@ -100,7 +100,10 @@ export default function App() {
           .then(r => r.ok ? r.json() : Promise.reject())
           .then(mapJson => {
             const parsed = parseTiledMap(mapJson, floorRef.current);
+            // Patch WorldEngine so Sol collides with Tiled walls, not map-data.ts walls
+            worldEngine.patchFloor(floorRef.current, parsed.worldTiles);
             scene.loadTiledGids(parsed.gidGrid, floorRef.current, parsed.firstgid, parsed.tilesetColumns);
+            refreshFloor(floorRef.current);
           })
           .catch(() => { /* no test.json → use solid-color tiles */ });
       });

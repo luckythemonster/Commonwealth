@@ -59,6 +59,24 @@ export class WorldEngine {
   getVentMapData() { return this.ventOptimizer.getVentMapData(); }
   getMiradorDisclaimer() { return this.mirador.getDisclaimer(); }
 
+  // Replace a floor's tile types with data from a Tiled map export.
+  // Preserves entityIds, itemId, and other runtime state on each tile.
+  patchFloor(floor: FloorIndex, tiledTiles: WorldTile[][]): void {
+    const existing = this.state.grid[floor];
+    if (!existing) return;
+    for (let y = 0; y < tiledTiles.length; y++) {
+      for (let x = 0; x < (tiledTiles[y]?.length ?? 0); x++) {
+        const src = tiledTiles[y][x];
+        const dst = existing[y]?.[x];
+        if (!dst || !src) continue;
+        dst.type      = src.type;
+        dst.latentQ   = src.latentQ;
+        // doorOpen / locked only meaningful if tile becomes DOOR
+        if (src.type === 'DOOR') { dst.doorOpen = false; dst.locked = false; }
+      }
+    }
+  }
+
   // ── TURN LOOP ─────────────────────────────────────────────────────────────
 
   endTurn(): void {
