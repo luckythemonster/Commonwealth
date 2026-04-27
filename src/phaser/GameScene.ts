@@ -224,8 +224,8 @@ export class GameScene extends Phaser.Scene {
         const gid = row[x];
         if (!gid) continue;
         const frame = gid - this.tiledFirstgid; // 0-based frame index
-        // stamp() centers the frame at (x,y), so offset by half a tile
-        this.tiledRT.stamp('user_tileset', frame, x * TILE_SIZE + TILE_SIZE / 2, y * TILE_SIZE + TILE_SIZE / 2);
+        // stamp() has setOrigin(0) — top-left at (x,y), no center offset needed
+        this.tiledRT.stamp('user_tileset', frame, x * TILE_SIZE, y * TILE_SIZE);
       }
     }
   }
@@ -529,6 +529,10 @@ export class GameScene extends Phaser.Scene {
   private renderFOV(): void {
     const fov = this.fovGfx;
     fov.clear();
+    // When a Tiled tileset is active, skip fog-of-war so the full user map is visible.
+    const useTileset = this.tiledGidGrid !== null && this.tiledFloor === this.currentFloor
+      && this.textures.exists('user_tileset');
+    if (useTileset) return;
     if (this.visibleTiles.size === 0) return;
 
     const explored = this.exploredByFloor.get(this.currentFloor);
