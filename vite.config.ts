@@ -5,4 +5,5 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   server: { host: '0.0.0.0' },
+  // config touch: forces server restart to pick up new env vars
 })
