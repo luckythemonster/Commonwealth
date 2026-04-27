@@ -104,6 +104,7 @@ export default function App() {
             worldEngine.patchFloor(floorRef.current, parsed.worldTiles);
             scene.loadTiledGids(parsed.gidGrid, floorRef.current, parsed.firstgid, parsed.tilesetColumns);
             refreshFloor(floorRef.current);
+            worldEngine.recalcFOV();
           })
           .catch(() => { /* no test.json → use solid-color tiles */ });
       });
