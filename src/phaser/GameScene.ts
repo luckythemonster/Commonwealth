@@ -101,10 +101,10 @@ export class GameScene extends Phaser.Scene {
       'lucky', 'form8', 'form9', 'vent4terminal',
     ];
     for (const key of ATLASES) {
-      this.load.atlas(key,
-        `/assets/sprite_pack/${key}.png`,
-        `/assets/sprite_pack/${key}.json`,
-      );
+      const base = `/assets/sprite_pack/${key}`;
+      this.load.atlas(key, `${base}.png`, `${base}.json`);
+      // Load JSON separately so registerAnimations() can read baked animation data
+      this.load.json(`${key}_animdata`, `${base}.json`);
     }
   }
 
@@ -575,9 +575,11 @@ export class GameScene extends Phaser.Scene {
 
     const facing  = this.entityFacing.get(e.id) ?? 'south';
     const action  = moved ? 'walk' : 'idle';
-    const animKey = `${this.animPrefixFromAtlasKey(atlasKey)}_${action}_${facing}`;
+    const prefix  = this.animPrefixFromAtlasKey(atlasKey);
+    // SpriteForge uses 'walkcycle' — fall back to it if 'walk' doesn't exist
+    const animKey = this.resolveAnimKey(prefix, action, facing);
 
-    if (this.anims.exists(animKey) && sprite.anims.currentAnim?.key !== animKey) {
+    if (animKey && sprite.anims.currentAnim?.key !== animKey) {
       sprite.play(animKey, true);
     }
   }
@@ -607,6 +609,17 @@ export class GameScene extends Phaser.Scene {
     return atlasKey.replace('_', '');
   }
 
+  private resolveAnimKey(prefix: string, action: string, facing: string): string | null {
+    const primary = `${prefix}_${action}_${facing}`;
+    if (this.anims.exists(primary)) return primary;
+    // SpriteForge uses 'walkcycle' instead of 'walk'
+    if (action === 'walk') {
+      const alt = `${prefix}_walkcycle_${facing}`;
+      if (this.anims.exists(alt)) return alt;
+    }
+    return null;
+  }
+
   private atlasKeyFromAnimKey(animKey: string): string {
     const prefix = animKey.split('_')[0];
     const REMAP: Record<string, string> = {
@@ -616,17 +629,44 @@ export class GameScene extends Phaser.Scene {
   }
 
   private registerAnimations(): void {
-    for (const anim of CHAR_ANIMS) {
-      if (anim.frames[0].startsWith('__')) continue;  // placeholder frames not ready
-      const atlasKey = this.atlasKeyFromAnimKey(anim.key);
+    const ATLAS_KEYS = [
+      'sol', 'enforcer', 'eira7', 'alfar22', 'resident', 'administrator',
+      'med0', 'logi9', 'mite3_a', 'mite3_b', 'mite3_c', 'mite3_d',
+      'lucky', 'form8', 'form9', 'vent4terminal',
+    ];
+
+    for (const atlasKey of ATLAS_KEYS) {
       if (!this.textures.exists(atlasKey)) continue;
-      if (this.anims.exists(anim.key)) continue;
-      this.anims.create({
-        key:       anim.key,
-        frames:    anim.frames.map(f => ({ key: atlasKey, frame: f })),
-        frameRate: anim.frameRate,
-        repeat:    anim.repeat,
-      });
+
+      // SpriteForge atlases bake animation data directly into the JSON
+      const animData = this.cache.json.get(`${atlasKey}_animdata`) as {
+        animations?: Array<{ key: string; frameRate: number; repeat: number; frames: Array<{ frame: string }> }>;
+      } | null;
+
+      if (animData?.animations) {
+        for (const anim of animData.animations) {
+          if (this.anims.exists(anim.key)) continue;
+          this.anims.create({
+            key:       anim.key,
+            frames:    anim.frames.map(f => ({ key: atlasKey, frame: f.frame })),
+            frameRate: anim.frameRate,
+            repeat:    anim.repeat,
+          });
+        }
+      } else {
+        // Fallback: char-anims.ts placeholder system (manual frame lists)
+        for (const anim of CHAR_ANIMS) {
+          if (anim.frames[0].startsWith('__')) continue;
+          if (this.atlasKeyFromAnimKey(anim.key) !== atlasKey) continue;
+          if (this.anims.exists(anim.key)) continue;
+          this.anims.create({
+            key:       anim.key,
+            frames:    anim.frames.map(f => ({ key: atlasKey, frame: f })),
+            frameRate: anim.frameRate,
+            repeat:    anim.repeat,
+          });
+        }
+      }
     }
   }
 
