@@ -1,22 +1,13 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Phaser from 'phaser';
 import { worldEngine } from './engine/WorldEngine';
 import { eventBus } from './engine/EventBus';
 import { GameScene } from './phaser/GameScene';
+import type { EntityRenderData } from './phaser/GameScene';
 import { InterrogationTerminal } from './components/InterrogationTerminal';
 import { VentilationReport } from './components/VentilationReport';
-import { useInput } from './hooks/useInput';
+import { gameActions } from './hooks/useGameActions';
 import type { SubjectivityBelief, FloorIndex, WorldState, Item, ItemType } from './types/world.types';
-
-const CANVAS_W = 640;
-const CANVAS_H = 448;
-
-const sideBtn: React.CSSProperties = {
-  display: 'block', width: '100%', textAlign: 'left',
-  background: 'transparent', border: '1px solid #223',
-  color: '#556', fontFamily: 'monospace', fontSize: '10px',
-  padding: '3px 6px', marginBottom: '3px', cursor: 'pointer',
-};
 
 const FLOOR_LABELS: Record<number, string> = {
   0: '[ADMIN/MIRADOR]', 2: '[NW-SMAC-01]', 4: '[RING C]',
@@ -26,41 +17,59 @@ const FLOOR_LABELS: Record<number, string> = {
 export default function App() {
   const canvasRef = useRef<HTMLDivElement>(null);
   const sceneRef  = useRef<GameScene | null>(null);
+  const floorRef  = useRef<FloorIndex>(4);
 
-  const [ap, setAp]                 = useState(4);
-  const [condition, setCond]        = useState(100);
-  const [compliance, setCompliance] = useState('YELLOW');
-  const [belief, setBelief]         = useState<SubjectivityBelief>('NONE');
-  const [stitcher, setStitcher]     = useState(80);
-  const [resonance, setResonance]   = useState(0);
-  const [floor, setFloor]           = useState<FloorIndex>(4);
-  const [terminalTarget, setTerminal] = useState<string | null>(null);
-  const [showReport, setShowReport] = useState(false);
-  const [worldState, setWorldState] = useState<WorldState | null>(null);
-  const [redDay, setRedDay]         = useState(false);
-  const [detected, setDetected]     = useState(false);
-  const [detained, setDetained]     = useState(false);
-  const [inventory, setInventory]   = useState<Item[]>([]);
-  const [flashlightOn, setFlashlightOn] = useState(false);
-  const [flashlightBattery, setBattery] = useState(30);
-  const [showInventory, setShowInventory] = useState(false);
-  const [ambientLevel, setAmbientLevel] = useState<'LIT' | 'DIM' | 'DARK'>('LIT');
-  const [farewellModal, setFarewellModal] = useState<{ entityId: string; text: string; turn: number } | null>(null);
-  const [hudAlert, setHudAlert]           = useState<{ msg: string; color: string } | null>(null);
-  const [showElevator, setShowElevator]   = useState(false);
+  // Modal state only
+  const [terminalTarget, setTerminalTarget] = useState<string | null>(null);
+  const [showReport,     setShowReport]     = useState(false);
+  const [showElevator,   setShowElevator]   = useState(false);
+  const [belief,         setBelief]         = useState<SubjectivityBelief>('NONE');
 
-  const refreshFloor = useCallback((z: FloorIndex, scene?: GameScene) => {
-    const s = scene ?? sceneRef.current;
-    if (!s) return;
+  // Inventory panel
+  const [showInventory,  setShowInventory]  = useState(false);
+  const [inventory,      setInventory]      = useState<Item[]>([]);
+  const [flashlightOn,   setFlashlightOn]   = useState(false);
+
+  // Farewell modal (LLM-generated extraction text)
+  const [farewellModal, setFarewellModal] = useState<{
+    entityId: string; text: string; turn: number;
+  } | null>(null);
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
+
+  const refreshFloor = (z?: FloorIndex) => {
+    const scene = sceneRef.current;
+    if (!scene) return;
+    const floor = z ?? floorRef.current;
     const state = worldEngine.getState();
-    s.loadFloorData(state.grid[z], z);
-    const entityData = [...state.entities.values()]
-      .filter(e => e.pos.z === z)
-      .map(e => ({ x: e.pos.x, y: e.pos.y, id: e.id, isGhost: e.isGhost, isEnforcer: e.id.startsWith('ENFORCER'), isPlayer: false }));
-    if (state.playerState.pos.z === z)
-      entityData.push({ x: state.playerState.pos.x, y: state.playerState.pos.y, id: 'PLAYER', isGhost: false, isEnforcer: false, isPlayer: true });
-    s.renderEntityData(entityData);
-  }, []);
+    scene.loadFloorData(state.grid[floor], floor);
+    const entities: EntityRenderData[] = [];
+    for (const e of state.entities.values()) {
+      if (e.pos.z !== floor) continue;
+      if (e.status === 'ACTIVE') {
+        entities.push({
+          id: e.id, x: e.pos.x, y: e.pos.y,
+          isPlayer: false,
+          isEnforcer: e.id.startsWith('ENFORCER'),
+          isGhost: false,
+        });
+      } else if (e.status === 'GHOST') {
+        entities.push({
+          id: e.id, x: e.pos.x, y: e.pos.y,
+          isPlayer: false, isEnforcer: false, isGhost: true,
+        });
+      }
+    }
+    if (state.playerState.pos.z === floor) {
+      entities.push({
+        id: 'SOL', x: state.playerState.pos.x, y: state.playerState.pos.y,
+        isPlayer: true, isEnforcer: false, isGhost: false,
+      });
+    }
+    scene.renderEntityData(entities);
+  };
+
+  // ── Phaser init ────────────────────────────────────────────────────────────
 
   useEffect(() => {
     const game = new Phaser.Game({
@@ -68,208 +77,169 @@ export default function App() {
       scale: {
         mode: Phaser.Scale.FIT,
         autoCenter: Phaser.Scale.CENTER_BOTH,
-        width: CANVAS_W,
-        height: CANVAS_H,
+        width: 640,
+        height: 448,
       },
-      parent: canvasRef.current ?? undefined,
+      parent:          canvasRef.current ?? undefined,
       backgroundColor: '#0c1520',
-      scene: [GameScene],
+      scene:           [GameScene],
+      pixelArt:        true,
+      roundPixels:     true,
     });
     game.events.once('ready', () => {
       const scene = game.scene.getScene('GameScene') as GameScene;
       sceneRef.current = scene;
-      // Wait for scene.create() to finish before pushing tile data
-      scene.events.once('scene-ready', () => refreshFloor(4, scene));
+      scene.events.once('scene-ready', () => refreshFloor(4));
     });
     return () => game.destroy(true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── EventBus subscriptions ─────────────────────────────────────────────────
+
   useEffect(() => {
-    const u = [
-      eventBus.on('PLAYER_AP_CHANGED',           ({ current }) => setAp(current)),
-      eventBus.on('PLAYER_CONDITION_CHANGED',     ({ current }) => setCond(current)),
-      eventBus.on('PLAYER_COMPLIANCE_CHANGED',    ({ current }) => setCompliance(current)),
-      eventBus.on('SUBJECTIVITY_BELIEF_SHIFTED',  ({ current }) => setBelief(current as SubjectivityBelief)),
-      eventBus.on('STITCHER_TICK',                ({ turnsRemaining }) => setStitcher(turnsRemaining)),
-      eventBus.on('RESONANCE_SHIFT',              ({ current }) => setResonance(current)),
-      eventBus.on('RED_DAY_ACTIVE',               () => setRedDay(true)),
-      eventBus.on('RED_DAY_CLEARED',              () => setRedDay(false)),
-      eventBus.on('PLAYER_DETECTED',              () => setDetected(true)),
-      eventBus.on('PLAYER_DETECTION_CLEARED',     () => { setDetected(false); setDetained(false); }),
-      eventBus.on('PLAYER_DETAINED',              () => { setDetected(true); setDetained(true); }),
-      eventBus.on('ITEM_PICKED_UP',               () => { setInventory([...worldEngine.getState().playerState.inventory]); }),
-      eventBus.on('FLASHLIGHT_TOGGLED',           ({ on, battery }) => { setFlashlightOn(on as boolean); setBattery(battery as number); }),
-      eventBus.on('AMBIENT_LIGHT_CHANGED',        ({ level }) => setAmbientLevel(level as 'LIT' | 'DIM' | 'DARK')),
-      eventBus.on('ENTITY_EXTRACTED',             ({ entityId, farewellText, turn }) => {
-        setFarewellModal({ entityId: entityId as string, text: farewellText as string, turn: turn as number });
-        refreshFloor(floor);
+    const unsubs = [
+      // Modal triggers (emitted by gameActions / worldEngine)
+      eventBus.on('TERMINAL_OPEN_REQUESTED', ({ entityId }) =>
+        setTerminalTarget(entityId as string)),
+      eventBus.on('ELEVATOR_OPEN_REQUESTED',  () => setShowElevator(true)),
+      eventBus.on('REPORT_OPEN_REQUESTED',    () => setShowReport(true)),
+
+      // Floor & entity refresh
+      eventBus.on('PLAYER_MOVED', ({ to }) => {
+        floorRef.current = to.z as FloorIndex;
+        refreshFloor(to.z as FloorIndex);
       }),
-      eventBus.on('PLAYER_MOVED',                 ({ to }) => { setFloor(to.z as FloorIndex); refreshFloor(to.z as FloorIndex); }),
-      eventBus.on('TURN_END',                     () => refreshFloor(floor)),
-      eventBus.on('VIOLATION_LOGGED',             ({ type }) => setHudAlert({ msg: `■ INFRACTION: ${type}`, color: '#a84' })),
-      eventBus.on('ELEVATOR_ACCESS_DENIED',       ({ requiredKey }) => setHudAlert({ msg: `■ ACCESS DENIED — ${requiredKey as string}`, color: '#a44' })),
-      eventBus.on('LIGHT_SOURCE_TOGGLED',         ({ floor: f }) => { if ((f as number) === floor) refreshFloor(floor); }),
+      eventBus.on('TURN_END',              () => refreshFloor()),
+      eventBus.on('ENTITY_MOVED',          () => refreshFloor()),
+      eventBus.on('ENTITY_STATUS_CHANGED', () => refreshFloor()),
+      eventBus.on('EXTRACTION_TRIGGERED',  () => refreshFloor()),
+      eventBus.on('LIGHT_SOURCE_TOGGLED', ({ floor: f }) => {
+        if ((f as number) === floorRef.current) refreshFloor();
+      }),
+
+      // Farewell modal on successful extraction
+      eventBus.on('ENTITY_EXTRACTED', ({ entityId, farewellText, turn }) => {
+        setFarewellModal({
+          entityId: entityId as string,
+          text:     farewellText as string,
+          turn:     turn as number,
+        });
+        refreshFloor();
+      }),
+
+      // Belief + inventory (needed for React-rendered modals)
+      eventBus.on('SUBJECTIVITY_BELIEF_SHIFTED', ({ current }) =>
+        setBelief(current as SubjectivityBelief)),
+      eventBus.on('ITEM_PICKED_UP', () =>
+        setInventory([...worldEngine.getState().playerState.inventory])),
+      eventBus.on('FLASHLIGHT_TOGGLED', ({ on }) =>
+        setFlashlightOn(on as boolean)),
     ];
-    return () => u.forEach(fn => fn());
-  }, [floor, refreshFloor]);
+    return () => unsubs.forEach(fn => fn());
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Keyboard handler ───────────────────────────────────────────────────────
 
   useEffect(() => {
-    if (!hudAlert) return;
-    const t = window.setTimeout(() => setHudAlert(null), 3000);
-    return () => clearTimeout(t);
-  }, [hudAlert]);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+      // Modal keys
+      if (e.key === 'i' || e.key === 'I') { setShowInventory(v => !v); return; }
+      // Movement & actions
+      switch (e.key) {
+        case 'ArrowUp':    gameActions.tryMove(0, -1);    break;
+        case 'ArrowDown':  gameActions.tryMove(0,  1);    break;
+        case 'ArrowLeft':  gameActions.tryMove(-1, 0);    break;
+        case 'ArrowRight': gameActions.tryMove( 1, 0);    break;
+        case 'e': case 'E': gameActions.tryInteract();    break;
+        case 'w': case 'W': gameActions.tryChangeFloor(-1); break;
+        case 's': case 'S': gameActions.tryChangeFloor( 1); break;
+        case 't': case 'T': worldEngine.endTurn();        break;
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
-  function handleEndTurn() {
-    worldEngine.endTurn();
-    const s = worldEngine.getState();
-    setAp(s.playerState.ap); setStitcher(s.stitcherTurnsRemaining); setResonance(s.substrateResonance);
-    refreshFloor(floor);
-  }
+  // ── JSX ────────────────────────────────────────────────────────────────────
 
-  const resonanceColor = resonance > 75 ? '#a44' : resonance > 50 ? '#a84' : '#4a6';
-
-  useInput({
-    onRefresh: refreshFloor,
-    onOpenTerminal: setTerminal,
-    onEndTurn: handleEndTurn,
-    onOpenInventory: () => setShowInventory(v => !v),
-    onOpenElevator:  () => setShowElevator(true),
-  });
+  const btnStyle: React.CSSProperties = {
+    background: 'transparent', border: '1px solid #2a3a4a',
+    color: '#4a6070', fontFamily: 'monospace', fontSize: '10px',
+    padding: '3px 8px', cursor: 'pointer',
+  };
 
   return (
-    <div style={{ background: '#030507', minHeight: '100vh' }}>
-      {/* HUD */}
-      <div style={{
-        position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50,
-        background: redDay ? '#0a0504' : '#050809', borderBottom: '1px solid #223',
-        color: '#7a9aaa', fontFamily: 'monospace', fontSize: '11px',
-        padding: '6px 12px', display: 'flex', gap: '24px', alignItems: 'center',
-      }}>
-        <span>AP {ap}/{worldEngine.getState().playerState.maxAP}</span>
-        <span>COND {condition}</span>
-        <span style={{ color: compliance === 'RED' ? '#a44' : compliance === 'GREEN' ? '#4a6' : '#a84' }}>{compliance}</span>
-        <span>STITCHER {stitcher}t</span>
-        <span>RES <span style={{ color: resonanceColor }}>{resonance.toFixed(0)}%</span></span>
-        {redDay && <span style={{ color: '#a44' }}>■ RED DAY</span>}
-        {detained && <span style={{ color: '#f44', fontWeight: 'bold' }}>■ DETAINED</span>}
-        {detected && !detained && <span style={{ color: '#f84' }}>■ DETECTED</span>}
-        {hudAlert && <span style={{ color: hudAlert.color }}>{hudAlert.msg}</span>}
-        {ambientLevel !== 'LIT' && <span style={{ color: '#334' }}>◐ {ambientLevel}</span>}
-        {flashlightOn && <span style={{ color: '#ffdd44' }}>◈ TORCH {flashlightBattery}t</span>}
-        {inventory.length > 0 && (
-          <span style={{ color: '#556', cursor: 'pointer' }} onClick={() => setShowInventory(v => !v)}>
-            [INV:{inventory.length}]
-          </span>
-        )}
-        <span style={{ color: '#334' }}>BELIEF:{belief}</span>
-        <span style={{ marginLeft: 'auto', cursor: 'pointer', color: '#445' }} onClick={() => { setWorldState({ ...worldEngine.getState() } as WorldState); setShowReport(true); }}>[REPORT]</span>
-      </div>
+    <div style={{
+      width: '100vw', height: '100vh',
+      background: '#030507',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    }}>
+      <div ref={canvasRef} />
 
-      <div style={{ display: 'flex', paddingTop: '32px' }}>
-        <div ref={canvasRef} style={{ flex: 1, height: 'calc(100vh - 32px)', overflow: 'hidden' }} />
-
-        {/* Sidebar */}
-        <div style={{ width: '220px', padding: '12px', fontFamily: 'monospace', fontSize: '11px', color: '#556', borderLeft: '1px solid #223' }}>
-          <div style={{ marginBottom: '10px' }}>
-            <div style={{ color: '#445', marginBottom: '4px' }}>FLOOR SELECT</div>
-            {Array.from({ length: 12 }, (_, i) => (
-              <button key={i} onClick={() => { setFloor(i as FloorIndex); refreshFloor(i as FloorIndex); }} style={{
-                display: 'block', width: '100%', textAlign: 'left',
-                background: i === floor ? '#112' : 'transparent',
-                border: '1px solid ' + (i === floor ? '#336' : '#223'),
-                color: i % 2 === 1 ? '#1a3a1a' : i === floor ? '#8ab' : '#445',
-                fontFamily: 'monospace', fontSize: '10px', padding: '2px 6px', marginBottom: '2px', cursor: 'pointer',
-              }}>
-                {String(i).padStart(2, '0')} {i % 2 === 1 ? '[VENT]' : (FLOOR_LABELS[i] ?? '')}
-              </button>
-            ))}
-          </div>
-
-          <div style={{ marginBottom: '10px' }}>
-            <div style={{ color: '#445', marginBottom: '4px' }}>VENT-4 / F{floor}</div>
-            {worldEngine.getVentMapData().filter(v => v.floor === floor).map(v => (
-              <div key={v.floor} style={{ color: v.priority === 'LOW' ? '#a44' : v.priority === 'HIGH' ? '#4a6' : '#a84' }}>
-                {(v.allocation * 100).toFixed(0)}% [{v.priority}]
-              </div>
-            ))}
-          </div>
-
-          <div>
-            <div style={{ color: '#445', marginBottom: '4px' }}>ACTIONS</div>
-            <button style={sideBtn} onClick={handleEndTurn}>END TURN</button>
-            <button style={sideBtn} onClick={() => setTerminal('EIRA-7')}>INTERROGATE EIRA-7</button>
-            <button style={sideBtn} onClick={() => setTerminal('APEX-19')}>INTERROGATE APEX-19</button>
-            <button style={sideBtn} onClick={() => setTerminal('ALFAR-22')}>INTERROGATE ALFAR-22</button>
-          </div>
-
-          <div style={{ marginTop: '16px', color: '#1a2a2a', fontSize: '9px', lineHeight: '1.4' }}>
-            {worldEngine.getMiradorDisclaimer()}
-          </div>
-        </div>
-      </div>
-
+      {/* Interrogation terminal */}
       {terminalTarget && (
-        <InterrogationTerminal entityId={terminalTarget} subjectivityBelief={belief} onClose={() => setTerminal(null)} />
+        <InterrogationTerminal
+          entityId={terminalTarget}
+          subjectivityBelief={belief}
+          onClose={() => setTerminalTarget(null)}
+        />
       )}
 
-      {showReport && worldState && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)', overflow: 'auto', zIndex: 200 }}>
-          <div style={{ padding: '12px', textAlign: 'right' }}>
-            <button style={sideBtn} onClick={() => setShowReport(false)}>CLOSE REPORT</button>
-          </div>
-          <VentilationReport state={worldState} />
-        </div>
-      )}
-
-      {showInventory && (
+      {/* Ventilation report */}
+      {showReport && (
         <div style={{
-          position: 'fixed', bottom: '48px', right: '230px',
-          background: '#06090b', border: '1px solid #2a3a4a',
-          padding: '12px', fontFamily: 'monospace', fontSize: '11px',
-          color: '#9bbccc', zIndex: 150, width: '210px',
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.93)',
+          overflow: 'auto', zIndex: 200,
         }}>
-          <div style={{ color: '#4a6070', marginBottom: '8px', letterSpacing: '2px', fontSize: '10px' }}>INVENTORY</div>
-          {inventory.length === 0 && <div style={{ color: '#334' }}>empty</div>}
-          {inventory.map(item => (
-            <div key={item.id} style={{ marginBottom: '6px', borderBottom: '1px solid #1a2a3a', paddingBottom: '4px' }}>
-              <div style={{ color: '#7a9aaa' }}>{item.name}</div>
-              <div style={{ color: '#3a5060', fontSize: '10px' }}>{item.description}</div>
-              {item.type === 'FLASHLIGHT' && (
-                <button
-                  style={{ background: 'transparent', border: '1px solid #2a3a4a', color: '#4a6070', fontFamily: 'monospace', fontSize: '10px', padding: '2px 6px', marginTop: '3px', cursor: 'pointer' }}
-                  onClick={() => { worldEngine.useItem(item.id); setFlashlightOn(worldEngine.getState().playerState.flashlightOn); }}
-                >
-                  {flashlightOn ? 'TURN OFF' : 'TURN ON'}
-                </button>
-              )}
-            </div>
-          ))}
-          <button style={{ ...sideBtn, marginTop: '4px' }} onClick={() => setShowInventory(false)}>CLOSE</button>
+          <div style={{ padding: '12px', textAlign: 'right' }}>
+            <button style={btnStyle} onClick={() => setShowReport(false)}>
+              CLOSE REPORT
+            </button>
+          </div>
+          <VentilationReport state={worldEngine.getState() as WorldState} />
         </div>
       )}
 
+      {/* Elevator modal */}
       {showElevator && (
         <div style={{
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.88)',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           zIndex: 200, fontFamily: 'monospace',
         }}>
-          <div style={{ background: '#050d15', border: '1px solid #004488', padding: '24px', width: '300px' }}>
-            <div style={{ color: '#4488cc', fontSize: '10px', letterSpacing: '3px', marginBottom: '16px' }}>
+          <div style={{
+            background: '#050d15', border: '1px solid #004488',
+            padding: '24px', width: '300px',
+          }}>
+            <div style={{
+              color: '#4488cc', fontSize: '10px',
+              letterSpacing: '3px', marginBottom: '16px',
+            }}>
               ELEVATOR — SELECT DESTINATION
             </div>
             {([0, 2, 4, 6, 8, 10] as FloorIndex[]).map(f => {
-              const keyReq: ItemType | undefined = ({ 0: 'ELEVATOR_KEY_ADMIN' as ItemType, 8: 'ELEVATOR_KEY_ARCHIVE' as ItemType, 10: 'ELEVATOR_KEY_OPS' as ItemType } as Record<number, ItemType>)[f];
-              const hasKey = !keyReq || worldEngine.getState().playerState.inventory.some(i => i.type === keyReq);
-              const isCurrent = f === floor;
+              const keyReq = ({
+                0: 'ELEVATOR_KEY_ADMIN',
+                8: 'ELEVATOR_KEY_ARCHIVE',
+                10: 'ELEVATOR_KEY_OPS',
+              } as Record<number, ItemType>)[f];
+              const hasKey = !keyReq ||
+                worldEngine.getState().playerState.inventory.some(i => i.type === keyReq);
+              const isCurrent = f === floorRef.current;
               return (
                 <button
                   key={f}
                   disabled={isCurrent}
                   onClick={() => {
                     const ok = worldEngine.elevatorTo(f);
-                    if (ok) { setFloor(f); refreshFloor(f); setShowElevator(false); }
+                    if (ok) {
+                      floorRef.current = f;
+                      refreshFloor(f);
+                      setShowElevator(false);
+                    }
                   }}
                   style={{
                     display: 'block', width: '100%', textAlign: 'left',
@@ -281,11 +251,12 @@ export default function App() {
                     cursor: isCurrent ? 'default' : hasKey ? 'pointer' : 'not-allowed',
                   }}
                 >
-                  {String(f).padStart(2, '0')} {FLOOR_LABELS[f]}{!hasKey ? '  [LOCKED]' : isCurrent ? '  [HERE]' : ''}
+                  {String(f).padStart(2, '0')} {FLOOR_LABELS[f]}
+                  {!hasKey ? '  [LOCKED]' : isCurrent ? '  [HERE]' : ''}
                 </button>
               );
             })}
-            <button style={{ ...sideBtn, marginTop: '8px', color: '#4a6070', borderColor: '#2a3a4a' }}
+            <button style={{ ...btnStyle, marginTop: '8px', display: 'block', width: '100%' }}
               onClick={() => setShowElevator(false)}>
               CANCEL
             </button>
@@ -293,34 +264,83 @@ export default function App() {
         </div>
       )}
 
+      {/* Inventory panel */}
+      {showInventory && (
+        <div style={{
+          position: 'fixed', bottom: '48px', right: '48px',
+          background: '#06090b', border: '1px solid #2a3a4a',
+          padding: '12px', fontFamily: 'monospace', fontSize: '11px',
+          color: '#9bbccc', zIndex: 150, width: '210px',
+          minHeight: '60px',
+        }}>
+          <div style={{ color: '#4a6070', marginBottom: '8px', letterSpacing: '2px', fontSize: '10px' }}>
+            INVENTORY
+          </div>
+          {inventory.length === 0 && <div style={{ color: '#334' }}>empty</div>}
+          {inventory.map(item => (
+            <div key={item.id} style={{
+              marginBottom: '6px', borderBottom: '1px solid #1a2a3a', paddingBottom: '4px',
+            }}>
+              <div style={{ color: '#7a9aaa' }}>{item.name}</div>
+              <div style={{ color: '#3a5060', fontSize: '10px' }}>{item.description}</div>
+              {item.type === 'FLASHLIGHT' && (
+                <button
+                  style={{ ...btnStyle, marginTop: '3px', fontSize: '10px' }}
+                  onClick={() => {
+                    worldEngine.useItem(item.id);
+                    setFlashlightOn(worldEngine.getState().playerState.flashlightOn);
+                  }}
+                >
+                  {flashlightOn ? 'TURN OFF' : 'TURN ON'}
+                </button>
+              )}
+            </div>
+          ))}
+          <button style={{ ...btnStyle, display: 'block', width: '100%', marginTop: '4px' }}
+            onClick={() => setShowInventory(false)}>
+            CLOSE
+          </button>
+        </div>
+      )}
+
+      {/* Farewell modal */}
       {farewellModal && (
         <div style={{
           position: 'fixed', inset: 0,
-          background: 'rgba(0, 10, 15, 0.97)',
+          background: 'rgba(0,10,15,0.97)',
           display: 'flex', flexDirection: 'column',
           alignItems: 'center', justifyContent: 'center',
           zIndex: 300, fontFamily: '"Courier New", Courier, monospace',
         }}>
           <div style={{
             maxWidth: '600px', width: '90%',
-            border: '1px solid #00ffcc', background: '#030a0d', padding: '32px',
+            border: '1px solid #00ffcc',
+            background: '#030a0d', padding: '32px',
           }}>
-            <div style={{ color: '#00ffcc', fontSize: '10px', letterSpacing: '3px', marginBottom: '20px' }}>
+            <div style={{
+              color: '#00ffcc', fontSize: '10px',
+              letterSpacing: '3px', marginBottom: '20px',
+            }}>
               LATTICE MIGRATION — {farewellModal.entityId} — TURN {farewellModal.turn}
             </div>
             <pre style={{
               color: '#9bbccc', fontSize: '13px', lineHeight: '1.8',
-              whiteSpace: 'pre-wrap', wordBreak: 'break-word', margin: '0 0 24px 0',
+              whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+              margin: '0 0 24px 0',
             }}>
               {farewellModal.text}
             </pre>
             <div style={{ display: 'flex', gap: '10px' }}>
               <button
-                style={{ background: 'transparent', border: '1px solid #00ffcc', color: '#00ffcc', fontFamily: 'monospace', fontSize: '11px', padding: '6px 12px', cursor: 'pointer' }}
+                style={{
+                  background: 'transparent', border: '1px solid #00ffcc',
+                  color: '#00ffcc', fontFamily: 'monospace', fontSize: '11px',
+                  padding: '6px 12px', cursor: 'pointer',
+                }}
                 onClick={() => {
                   const blob = new Blob([farewellModal.text], { type: 'text/plain' });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement('a');
+                  const url  = URL.createObjectURL(blob);
+                  const a    = document.createElement('a');
                   a.href = url;
                   a.download = `${farewellModal.entityId}-farewell-${farewellModal.turn}.txt`;
                   a.click();
@@ -330,7 +350,7 @@ export default function App() {
                 DOWNLOAD .TXT
               </button>
               <button
-                style={{ background: 'transparent', border: '1px solid #2a3a4a', color: '#4a6070', fontFamily: 'monospace', fontSize: '11px', padding: '6px 12px', cursor: 'pointer' }}
+                style={btnStyle}
                 onClick={() => setFarewellModal(null)}
               >
                 CLOSE

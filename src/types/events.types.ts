@@ -127,6 +127,16 @@ export interface EventMap {
 
   // --- DOORS ---
   DOOR_LOCKED_BLOCKED: { pos: Vec3 };
+
+  // --- MODAL TRIGGERS (GameScene/actions → App.tsx) ---
+  TERMINAL_OPEN_REQUESTED:  { entityId: string };
+  ELEVATOR_OPEN_REQUESTED:  Record<string, never>;
+  REPORT_OPEN_REQUESTED:    Record<string, never>;
+
+  // --- COMBAT ---
+  ENTITY_ATTACKED: { entityId: EntityId; pos: Vec3; turn: number; sacred: boolean };
+  ENTITY_HIT: { entityId: EntityId; hpRemaining: number; maxHp: number; pos: Vec3 };
+  ATTACK_STAGGERED: { entityId: EntityId; pos: Vec3 };
 }
 
 export type EventName = keyof EventMap;
