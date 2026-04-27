@@ -8,11 +8,13 @@ import type { GameActions } from './useGameActions';
 interface KeyboardHandlers {
   onEndTurn: () => void;
   onOpenInventory: () => void;
+  disabled?: boolean;
 }
 
-export function useInput(actions: GameActions, { onEndTurn, onOpenInventory }: KeyboardHandlers) {
+export function useInput(actions: GameActions, { onEndTurn, onOpenInventory, disabled }: KeyboardHandlers) {
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
+      if (disabled) return;
       if ((e.target as HTMLElement).tagName === 'INPUT') return;
 
       switch (e.key) {

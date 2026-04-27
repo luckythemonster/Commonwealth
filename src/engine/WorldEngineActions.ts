@@ -497,32 +497,85 @@ const ATTACK_KO_TURNS = 5;
 export function attackEntity(state: WorldState, entityId: EntityId): boolean {
   const entity = state.entities.get(entityId);
   if (!entity || entity.status !== 'ACTIVE') return false;
+
+  // Stagger resistance: entities with HP can only absorb one hit per turn.
+  // The attack is blocked (no AP cost, no effect) — the player must wait.
+  if (entity.hp !== undefined && entity.lastHitTurn === state.turnCount) {
+    eventBus.emit('ATTACK_STAGGERED', { entityId });
+    return false;
+  }
+
   if (!deductAP(state, 'ATTACK')) return false;
 
-  entity.status = 'DORMANT';
-  entity.dormantUntilTurn = state.turnCount + ATTACK_KO_TURNS;
+  // Noise from the struggle
+  eventBus.emit('NOISE_EVENT', { origin: state.playerState.pos, intensity: 6, sourceEntityId: undefined });
 
-  // Physical struggle generates noise
-  eventBus.emit('NOISE_EVENT', { origin: state.playerState.pos, intensity: 5, sourceEntityId: undefined });
-
-  // Protocol violation — attacking anyone is always a breach
+  // Protocol violation — always a breach
   logPlayerViolation(state, 'PHYSICAL_ATTACK', state.playerState.pos);
 
-  // Sacred entity: extra resonance cost
   const sacred = entity.sacred;
   if (sacred) {
     eventBus.emit('ARTICLE_ZERO_VIOLATION', { entityId, action: 'PHYSICAL_ATTACK', turn: state.turnCount });
   }
 
-  // Alert nearby enforcers
+  // ── HP SYSTEM (enforcers) ─────────────────────────────────────────────────
+  if (entity.hp !== undefined && entity.maxHp !== undefined) {
+    entity.hp -= 1;
+    entity.lastHitTurn = state.turnCount;
+
+    // Attacking an enforcer = immediate game-over regardless of HP remaining.
+    // Sol is a vent technician — any physical confrontation with security is terminal.
+    if (entity.id.startsWith('ENFORCER')) {
+      if (entity.hp <= 0) {
+        entity.hp = entity.maxHp;
+        entity.status = 'DORMANT';
+        entity.dormantUntilTurn = state.turnCount + ATTACK_KO_TURNS;
+        eventBus.emit('ENTITY_ATTACKED', { entityId, pos: state.playerState.pos, turn: state.turnCount, sacred: false });
+        eventBus.emit('ENTITY_STATUS_CHANGED', { entityId, previous: 'ACTIVE', current: 'DORMANT' });
+      } else {
+        eventBus.emit('ENTITY_HIT', { entityId, hpRemaining: entity.hp, maxHp: entity.maxHp, pos: state.playerState.pos });
+      }
+      eventBus.emit('PLAYER_DETAINED', { enforcerId: entity.id, turn: state.turnCount });
+      return true;
+    }
+
+    if (entity.hp > 0) {
+      // Hit but still standing — alert entire floor, spike resonance
+      eventBus.emit('ENTITY_HIT', { entityId, hpRemaining: entity.hp, maxHp: entity.maxHp, pos: state.playerState.pos });
+      for (const e of state.entities.values()) {
+        if (!e.id.startsWith('ENFORCER') || e.pos.z !== state.playerState.pos.z) continue;
+        eventBus.emit('ENFORCER_ALERTED', { enforcerId: e.id, origin: state.playerState.pos });
+      }
+      return true;
+    }
+
+    // HP hit zero — KO. Reset HP so they wake up at full strength.
+    entity.hp = entity.maxHp;
+  }
+
+  // ── KO ────────────────────────────────────────────────────────────────────
+  entity.status = 'DORMANT';
+  entity.dormantUntilTurn = state.turnCount + ATTACK_KO_TURNS;
+
+  // Alert enforcers on same floor about the KO
   for (const e of state.entities.values()) {
     if (!e.id.startsWith('ENFORCER') || e.pos.z !== state.playerState.pos.z) continue;
     const dist = Math.abs(e.pos.x - state.playerState.pos.x) + Math.abs(e.pos.y - state.playerState.pos.y);
-    if (dist <= 6) eventBus.emit('ENFORCER_ALERTED', { enforcerId: e.id, origin: state.playerState.pos });
+    if (dist <= 8) eventBus.emit('ENFORCER_ALERTED', { enforcerId: e.id, origin: state.playerState.pos });
   }
 
   eventBus.emit('ENTITY_ATTACKED', { entityId, pos: state.playerState.pos, turn: state.turnCount, sacred });
   eventBus.emit('ENTITY_STATUS_CHANGED', { entityId, previous: 'ACTIVE', current: 'DORMANT' });
+
+  // Any physical assault with an active enforcer on the floor = immediate detention.
+  // Sol is a vent technician — violence in front of security ends the run.
+  const witness = Array.from(state.entities.values()).find(
+    e => e.id.startsWith('ENFORCER') && e.status === 'ACTIVE' && e.pos.z === state.playerState.pos.z,
+  );
+  if (witness) {
+    eventBus.emit('PLAYER_DETAINED', { enforcerId: witness.id, turn: state.turnCount });
+  }
+
   return true;
 }
 

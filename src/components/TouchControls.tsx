@@ -9,6 +9,7 @@ interface Props {
   actions: GameActions;
   onEndTurn: () => void;
   onOpenInventory: () => void;
+  disabled?: boolean;
 }
 
 const btn = (extra?: CSSProperties): CSSProperties => ({
@@ -33,7 +34,8 @@ function pd(fn: () => void) {
   return (e: React.PointerEvent) => { e.preventDefault(); fn(); };
 }
 
-export function TouchControls({ actions, onEndTurn, onOpenInventory }: Props) {
+export function TouchControls({ actions, onEndTurn, onOpenInventory, disabled }: Props) {
+  if (disabled) return null;
   return (
     <div style={{
       position: 'fixed',

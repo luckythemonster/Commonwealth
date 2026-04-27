@@ -62,6 +62,7 @@ interface EntityRenderData {
   isDormant?: boolean;
   isAtTerminal?: boolean;
   isExtracting?: boolean;
+  isChasing?: boolean;
 }
 
 export class GameScene extends Phaser.Scene {
@@ -87,11 +88,8 @@ export class GameScene extends Phaser.Scene {
 
   preload(): void {
     this.load.spritesheet('tileset', '/assets/tileset.png', { frameWidth: SPRITE_SIZE, frameHeight: SPRITE_SIZE });
-    this.load.atlas('chars', '/assets/sprite_pack/chars.png', '/assets/sprite_pack/chars.json');
-    // Grid spritesheets — numeric frame indices work directly (4 cols × N rows, 16×16px)
-    this.load.spritesheet('guard',    '/assets/guard.png',    { frameWidth: 16, frameHeight: 16 });
-    this.load.spritesheet('inspector','/assets/inspector.png',{ frameWidth: 16, frameHeight: 16 });
-    this.load.spritesheet('inmate',   '/assets/inmate.png',   { frameWidth: 16, frameHeight: 16 });
+    // Unified character atlas: Sol, Enforcer, EIRA-7 — all frames share hash IDs with char-anims.ts
+    this.load.atlas('chars', '/assets/sprite_pack/EIRA-7,_Enforcer,_Sol.png', '/assets/sprite_pack/EIRA-7,_Enforcer,_Sol.json');
   }
 
   create(): void {
@@ -103,32 +101,8 @@ export class GameScene extends Phaser.Scene {
     this.overlayGraphics = this.add.graphics().setDepth(10);
 
     this.createCharAnimations();
-    this.createGridAnimations();
     this.subscribeToEventBus();
     this.events.emit('scene-ready');
-  }
-
-  // Grid spritesheet animations — 4 cols × N rows, row order: south/north/west/east
-  private createGridAnimations(): void {
-    const mk = (key: string, tex: string, start: number, end: number, rate: number) => {
-      if (!this.anims.exists(key))
-        this.anims.create({ key, frames: this.anims.generateFrameNumbers(tex, { start, end }), frameRate: rate, repeat: -1 });
-    };
-    // guard: 4×7 — rows 0-3 walk (S/N/W/E), row 4 idle, row 5 alert, row 6 attack
-    mk('guard_walk_south', 'guard',  0,  3, 6);
-    mk('guard_walk_north', 'guard',  4,  7, 6);
-    mk('guard_walk_west',  'guard',  8, 11, 6);
-    mk('guard_walk_east',  'guard', 12, 15, 6);
-    mk('guard_idle',       'guard', 16, 19, 4);
-    mk('guard_alert',      'guard', 20, 23, 8);
-    // inspector: 4×8 — rows 0-3 walk (S/N/W/E), row 4 idle, rows 5-7 other
-    mk('inspector_walk_south', 'inspector',  0,  3, 6);
-    mk('inspector_walk_north', 'inspector',  4,  7, 6);
-    mk('inspector_walk_west',  'inspector',  8, 11, 6);
-    mk('inspector_walk_east',  'inspector', 12, 15, 6);
-    mk('inspector_idle',       'inspector', 16, 19, 4);
-    // inmate: 3×1 — frames 0-2 simple walk cycle
-    mk('inmate_walk', 'inmate', 0, 2, 6);
   }
 
   private createCharAnimations(): void {
@@ -146,21 +120,25 @@ export class GameScene extends Phaser.Scene {
     console.log(`[GameScene] registered ${count} char anims, chars texture exists: ${this.textures.exists('chars')}`);
   }
 
-  private getTextureKey(e: EntityRenderData): string {
-    if (e.isPlayer) return 'chars';
-    if (e.isEnforcer) return 'guard';
-    if (e.id === 'EIRA-7') return 'inspector';
-    return 'inmate';
+  private getTextureKey(_e: EntityRenderData): string {
+    return 'chars'; // all sprites in unified atlas
   }
 
   private selectAnimKey(e: EntityRenderData, facing: string, isMoving = true): string {
     if (e.isPlayer) {
       if (e.isAtTerminal) return `solibarracastro_terminal_${facing}`;
+      if (e.isExtracting) return `solibarracastro_enterduct_${facing}`;
       return isMoving ? `solibarracastro_walkcycle_${facing}` : `solibarracastro_idle_${facing}`;
     }
-    if (e.isEnforcer) return isMoving ? `guard_walk_${facing}` : 'guard_idle';
-    if (e.id === 'EIRA-7') return isMoving ? `inspector_walk_${facing}` : 'inspector_idle';
-    return 'inmate_walk';
+    if (e.isEnforcer) {
+      if (isMoving) return e.isChasing ? `enforcer_chase_${facing}` : `enforcer_walkcycle_${facing}`;
+      return `enforcer_rotations_${facing}`;
+    }
+    if (e.id === 'EIRA-7') {
+      if (e.isExtracting) return `eira7_runcycle_${facing}`;
+      return isMoving ? `eira7_walkcycle_${facing}` : `eira7_rotations_${facing}`;
+    }
+    return isMoving ? `solibarracastro_walkcycle_${facing}` : `solibarracastro_idle_${facing}`;
   }
 
   private subscribeToEventBus(): void {
@@ -226,6 +204,22 @@ export class GameScene extends Phaser.Scene {
       eventBus.on('DOOR_LOCKED_BLOCKED', ({ pos }) => {
         const p = pos as { x: number; y: number; z: number };
         if (p.z === this.currentFloor) this.flashTile(p.x, p.y, 0xcc2222, 0.6);
+      }),
+      eventBus.on('ENTITY_HIT', ({ entityId }) => {
+        const lastPos = this.entityLastPos.get(entityId as string);
+        if (lastPos) {
+          this.flashTile(lastPos.x, lastPos.y, 0xff2200, 0.7);
+        }
+        // Full-screen red pulse — the struggle is violent
+        this.overlayGraphics.fillStyle(0xaa2200, 0.3);
+        this.overlayGraphics.fillRect(0, 0, this.scale.width, this.scale.height);
+        this.time.delayedCall(100, () => this.renderOverlay());
+      }),
+      eventBus.on('ATTACK_STAGGERED', () => {
+        // Brief white flash: blocked / can't hit again this turn
+        this.overlayGraphics.fillStyle(0xffffff, 0.12);
+        this.overlayGraphics.fillRect(0, 0, this.scale.width, this.scale.height);
+        this.time.delayedCall(60, () => this.renderOverlay());
       }),
     );
   }
@@ -376,7 +370,7 @@ export class GameScene extends Phaser.Scene {
     const useFOV = this.visibleTiles.size > 0;
 
     for (const e of entities) {
-      if (useFOV && !e.isPlayer && !this.visibleTiles.has(`${e.x},${e.y}`)) continue;
+      const inFOV = !useFOV || e.isPlayer || this.visibleTiles.has(`${e.x},${e.y}`);
       seen.add(e.id);
 
       const lastPos = this.entityLastPos.get(e.id);
@@ -414,7 +408,7 @@ export class GameScene extends Phaser.Scene {
 
       // Subtle indicator dot under each entity (no box — sprite handles the visual)
       const dotColor = e.isPlayer ? 0x00cc99 : e.isEnforcer ? 0xcc2222 : 0x887744;
-      this.entityBgGfx.fillStyle(dotColor, e.isGhost ? 0.08 : 0.22);
+      this.entityBgGfx.fillStyle(dotColor, e.isGhost ? 0.08 : inFOV ? 0.22 : 0.10);
       this.entityBgGfx.fillCircle(
         e.x * TILE_SIZE + TILE_SIZE / 2,
         e.y * TILE_SIZE + TILE_SIZE - 4,
@@ -438,38 +432,37 @@ export class GameScene extends Phaser.Scene {
         this.entitySprites.set(e.id, sprite);
       }
 
-      // chars atlas frames are 36×36 source → scale 0.9 ≈ 32px; grid sheets are 16×16 → scale 2.0
-      sprite.setScale(texKey === 'chars' ? CHAR_SCALE : 2.0);
-      sprite.setAlpha(e.isGhost ? 0.35 : 1.0);
+      sprite.setScale(CHAR_SCALE); // all atlas frames are 36×36
+      sprite.setAlpha(e.isGhost ? 0.35 : inFOV ? 1.0 : 0.45);
       sprite.setVisible(true);
 
       const targetX = e.x * TILE_SIZE + TILE_SIZE / 2;
       const targetY = e.y * TILE_SIZE + TILE_SIZE / 2;
 
-      // Play movement animation immediately; switch to idle when tween completes
-      const moveKey = this.selectAnimKey(e, facing, true);
-      if (this.anims.exists(moveKey) && sprite.anims.getName() !== moveKey) {
-        sprite.play(moveKey, true);
-      }
-
       if (moved && !e.isGhost) {
-        // Smooth glide to new tile
+        // Play walk/chase animation; smooth glide to new tile
+        const moveKey = this.selectAnimKey(e, facing, true);
+        if (this.anims.exists(moveKey)) sprite.play(moveKey, true);
+
         this.tweens.killTweensOf(sprite);
         this.tweens.add({
           targets: sprite,
           x: targetX,
           y: targetY,
-          duration: 160,
+          duration: 300,
           ease: 'Quad.easeOut',
           onComplete: () => {
             const idleKey = this.selectAnimKey(e, facing, false);
-            if (this.anims.exists(idleKey) && sprite!.anims.getName() !== idleKey) {
-              sprite!.play(idleKey, true);
-            }
+            if (this.anims.exists(idleKey)) sprite!.play(idleKey, true);
           },
         });
       } else {
         sprite.setPosition(targetX, targetY);
+        // Settle into idle if not already there
+        const idleKey = this.selectAnimKey(e, facing, false);
+        if (this.anims.exists(idleKey) && sprite.anims.getName() !== idleKey) {
+          sprite.play(idleKey, true);
+        }
       }
     }
 
