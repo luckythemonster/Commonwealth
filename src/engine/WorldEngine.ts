@@ -59,6 +59,9 @@ export class WorldEngine {
   getVentMapData() { return this.ventOptimizer.getVentMapData(); }
   getMiradorDisclaimer() { return this.mirador.getDisclaimer(); }
 
+  // Re-run FOV from Sol's current position — call after patching the floor.
+  recalcFOV(): void { updateFOV(this.state); }
+
   // Replace a floor's tile types with data from a Tiled map export.
   // Preserves entityIds, itemId, and other runtime state on each tile.
   patchFloor(floor: FloorIndex, tiledTiles: WorldTile[][]): void {
