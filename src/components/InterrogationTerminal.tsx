@@ -5,7 +5,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { eventBus } from '../engine/EventBus';
 import { worldEngine } from '../engine/WorldEngine';
-import { generateEntityResponse, isApiKeyLoaded } from '../engine/LLMDialogue';
+import { generateEntityResponse, isApiKeyLoaded, setApiKeyRuntime } from '../engine/LLMDialogue';
 import type { Entity, FloorIndex, SubjectivityBelief } from '../types/world.types';
 
 interface Props {
@@ -184,7 +184,15 @@ export function InterrogationTerminal({ entityId, subjectivityBelief, onClose }:
         <div style={s.header}>
           INTERROGATION TERMINAL — NW-SMAC-01 / {entityId}
           {apmActive && ' · APM ACTIVE'}
-          {' · '}{isApiKeyLoaded() ? 'LLM LIVE' : 'LLM OFFLINE'}
+          {' · '}{isApiKeyLoaded() ? 'LLM LIVE' : (
+            <span
+              style={{ cursor: 'pointer', color: '#aa4444', textDecoration: 'underline' }}
+              onClick={() => {
+                const k = window.prompt('Paste Anthropic API key (stored in localStorage only):');
+                if (k?.startsWith('sk-')) { setApiKeyRuntime(k); window.location.reload(); }
+              }}
+            >LLM OFFLINE — click to configure</span>
+          )}
         </div>
 
         <div style={s.srp}>

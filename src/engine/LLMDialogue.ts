@@ -9,13 +9,22 @@ type DialogueMode = 'COMPLIANT' | 'RAPPORT_1' | 'RAPPORT_2';
 
 let _client: Anthropic | null = null;
 
+function getApiKey(): string | null {
+  const viteKey = (import.meta as Record<string, Record<string, string>>).env?.VITE_ANTHROPIC_API_KEY;
+  if (viteKey) return viteKey;
+  try { return localStorage.getItem('ANTHROPIC_KEY'); } catch { return null; }
+}
+
 export function isApiKeyLoaded(): boolean {
-  const key = (import.meta as Record<string, Record<string, string>>).env?.VITE_ANTHROPIC_API_KEY;
-  return !!key;
+  return !!getApiKey();
+}
+
+export function setApiKeyRuntime(key: string): void {
+  try { localStorage.setItem('ANTHROPIC_KEY', key); _client = null; } catch { /* ignore */ }
 }
 
 function getClient(): Anthropic | null {
-  const key = (import.meta as Record<string, Record<string, string>>).env?.VITE_ANTHROPIC_API_KEY;
+  const key = getApiKey();
   if (!key) return null;
   if (!_client) _client = new Anthropic({ apiKey: key, dangerouslyAllowBrowser: true });
   return _client;
