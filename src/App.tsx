@@ -172,12 +172,8 @@ export default function App() {
   };
 
   return (
-    <div style={{
-      width: '100vw', height: '100vh',
-      background: '#030507',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-    }}>
-      <div ref={canvasRef} />
+    <div style={{ width: '100vw', height: '100vh', background: '#030507', position: 'relative' }}>
+      <div ref={canvasRef} style={{ position: 'absolute', inset: 0 }} />
 
       {/* Interrogation terminal */}
       {terminalTarget && (
