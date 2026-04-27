@@ -122,8 +122,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   create(): void {
-    // Tiled tileset render texture — sits behind everything (depth -1)
-    this.tiledRT = this.add.renderTexture(0, 0, WORLD_W, WORLD_H).setDepth(-1);
+    // Tiled tileset render texture — sits behind everything (depth -1).
+    // setOrigin(0) anchors the top-left at (0,0); default Image origin(0.5,0.5)
+    // would center it at (0,0), exposing only the upper-right quadrant of the world.
+    this.tiledRT = this.add.renderTexture(0, 0, WORLD_W, WORLD_H).setDepth(-1).setOrigin(0);
 
     // World layers
     this.tileGfx      = this.add.graphics().setDepth(0);
@@ -224,8 +226,8 @@ export class GameScene extends Phaser.Scene {
         const gid = row[x];
         if (!gid) continue;
         const frame = gid - this.tiledFirstgid; // 0-based frame index
-        // stamp() has setOrigin(0) — top-left at (x,y), no center offset needed
-        this.tiledRT.stamp('user_tileset', frame, x * TILE_SIZE, y * TILE_SIZE);
+        // stamp() uses center origin — place center at (x*32+16, y*32+16) so tile fills (x*32, y*32)-(x*32+32, y*32+32)
+        this.tiledRT.stamp('user_tileset', frame, x * TILE_SIZE + TILE_SIZE / 2, y * TILE_SIZE + TILE_SIZE / 2);
       }
     }
   }
