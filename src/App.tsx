@@ -370,6 +370,12 @@ export default function App() {
               <button style={sideBtn} onClick={() => setTerminal('EIRA-7')}>INTERROGATE EIRA-7</button>
               <button style={sideBtn} onClick={() => setTerminal('APEX-19')}>INTERROGATE APEX-19</button>
               <button style={sideBtn} onClick={() => setTerminal('ALFAR-22')}>INTERROGATE ALFAR-22</button>
+              <button
+                style={{ ...sideBtn, color: '#c44', borderColor: '#522' }}
+                onClick={() => eventBus.emit('PLAYER_DETAINED', { enforcerId: 'ENFORCER-TEST', turn: worldEngine.getState().turnCount })}
+              >
+                [TEST] FORCE DETAINED
+              </button>
             </div>
 
             <div style={{ marginTop: '16px', color: '#1a2a2a', fontSize: '9px', lineHeight: '1.4' }}>
