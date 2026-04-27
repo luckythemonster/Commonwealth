@@ -6,7 +6,9 @@ import { GameScene } from './phaser/GameScene';
 import type { EntityRenderData } from './phaser/GameScene';
 import { InterrogationTerminal } from './components/InterrogationTerminal';
 import { VentilationReport } from './components/VentilationReport';
+import { TouchControls } from './components/TouchControls';
 import { gameActions } from './hooks/useGameActions';
+import { useMobile } from './hooks/useMobile';
 import type { SubjectivityBelief, FloorIndex, WorldState, Item, ItemType } from './types/world.types';
 
 const FLOOR_LABELS: Record<number, string> = {
@@ -18,6 +20,7 @@ export default function App() {
   const canvasRef = useRef<HTMLDivElement>(null);
   const sceneRef  = useRef<GameScene | null>(null);
   const floorRef  = useRef<FloorIndex>(4);
+  const isMobile  = useMobile();
 
   // Modal state only
   const [terminalTarget, setTerminalTarget] = useState<string | null>(null);
@@ -174,6 +177,10 @@ export default function App() {
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#030507', position: 'relative' }}>
       <div ref={canvasRef} style={{ position: 'absolute', inset: 0 }} />
+
+      {isMobile && (
+        <TouchControls onToggleInventory={() => setShowInventory(v => !v)} />
+      )}
 
       {/* Interrogation terminal */}
       {terminalTarget && (

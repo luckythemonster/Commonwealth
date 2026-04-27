@@ -14,3 +14,7 @@ html, body {
   width: 100%;
   height: 100%;
 }
+
+* { -webkit-tap-highlight-color: transparent; }
+button { -webkit-touch-callout: none; user-select: none; }
+html, body { touch-action: manipulation; }
