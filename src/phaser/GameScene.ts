@@ -142,7 +142,7 @@ export class GameScene extends Phaser.Scene {
     const cam = this.cameras.main;
     cam.setBounds(0, 0, WORLD_W, WORLD_H);
     cam.startFollow(this.solTracker, true, 0.1, 0.1);
-    cam.setZoom(2);
+    cam.setZoom(1);
 
     // Diegetic HUD — setScrollFactor(0) keeps them viewport-fixed
     this.hudFloor = this.add.text(8, 4, 'F:02', {
@@ -224,7 +224,8 @@ export class GameScene extends Phaser.Scene {
         const gid = row[x];
         if (!gid) continue;
         const frame = gid - this.tiledFirstgid; // 0-based frame index
-        this.tiledRT.stamp('user_tileset', frame, x * TILE_SIZE, y * TILE_SIZE);
+        // stamp() centers the frame at (x,y), so offset by half a tile
+        this.tiledRT.stamp('user_tileset', frame, x * TILE_SIZE + TILE_SIZE / 2, y * TILE_SIZE + TILE_SIZE / 2);
       }
     }
   }
