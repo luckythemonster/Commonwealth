@@ -1,10 +1,11 @@
 // PHASER 3 SLAVE RENDERER — GameScene V2
-// Solid-color tile Graphics, colored-rectangle entities, diegetic HUD.
+// Solid-color tile Graphics + sprite overlay (when atlases loaded), diegetic HUD.
 // Owns NO game state. All data pushed in via loadFloorData / renderEntityData.
 // STRICT DIRECTIVE: Do NOT refactor or remove the EventBus bridge.
 
 import Phaser from 'phaser';
 import { eventBus } from '../engine/EventBus';
+import { CHAR_ANIMS } from '../data/char-anims';
 import type { WorldTile, FloorIndex } from '../types/world.types';
 
 const TILE_SIZE = 32;
@@ -48,6 +49,11 @@ export class GameScene extends Phaser.Scene {
   // Entity labels (Text objects, rebuilt each renderEntities call)
   private entityLabels: Phaser.GameObjects.Text[] = [];
 
+  // Sprite-based entity rendering
+  private entitySprites: Map<string, Phaser.GameObjects.Sprite> = new Map();
+  private entityPrevPos: Map<string, { x: number; y: number }>  = new Map();
+  private entityFacing:  Map<string, string>                     = new Map();
+
   // Camera follow target — invisible Zone the camera lerps toward
   private solTracker!: Phaser.GameObjects.Zone;
 
@@ -87,9 +93,19 @@ export class GameScene extends Phaser.Scene {
   constructor() { super({ key: 'GameScene' }); }
 
   preload(): void {
-    // No sprite assets required for placeholder Graphics rendering.
-    // When PixelLab sprite_pack exports arrive, add atlas loads here:
-    // this.load.atlas('sol', '/assets/sprite_pack/sol.png', '/assets/sprite_pack/sol.json');
+    // Attempt to load all character atlases. Missing files log a 404 and are skipped gracefully.
+    // Place {key}.png + {key}.json in public/assets/sprite_pack/ to activate sprites.
+    const ATLASES = [
+      'sol', 'enforcer', 'eira7', 'alfar22', 'resident', 'administrator',
+      'med0', 'logi9', 'mite3_a', 'mite3_b', 'mite3_c', 'mite3_d',
+      'lucky', 'form8', 'form9', 'vent4terminal',
+    ];
+    for (const key of ATLASES) {
+      this.load.atlas(key,
+        `/assets/sprite_pack/${key}.png`,
+        `/assets/sprite_pack/${key}.json`,
+      );
+    }
   }
 
   create(): void {
@@ -134,6 +150,7 @@ export class GameScene extends Phaser.Scene {
     // Compliance dot follows Sol in update() — NOT scroll-fixed
     this.complianceDot = this.add.graphics().setDepth(50);
 
+    this.registerAnimations();
     this.subscribeToEventBus();
     this.renderHUD();
     this.events.emit('scene-ready');
@@ -478,34 +495,138 @@ export class GameScene extends Phaser.Scene {
     for (const lbl of this.entityLabels) lbl.destroy();
     this.entityLabels = [];
 
-    const useFOV = this.visibleTiles.size > 0;
+    const useFOV   = this.visibleTiles.size > 0;
+    const currentIds = new Set(this.currentEntities.map(e => e.id));
+
+    // Destroy sprites for entities no longer on this floor
+    for (const [id, sprite] of this.entitySprites) {
+      if (!currentIds.has(id)) {
+        sprite.destroy();
+        this.entitySprites.delete(id);
+        this.entityPrevPos.delete(id);
+      }
+    }
 
     for (const e of this.currentEntities) {
-      const key = `${e.x},${e.y}`;
-      const inFOV = !useFOV || e.isPlayer || this.visibleTiles.has(key);
-      if (!inFOV && !e.isGhost) continue;
+      // Compute moved BEFORE updating prevPos
+      const prev  = this.entityPrevPos.get(e.id);
+      const moved = prev ? (e.x !== prev.x || e.y !== prev.y) : false;
 
-      const px = e.x * TILE_SIZE;
-      const py = e.y * TILE_SIZE;
-      const color = e.isPlayer    ? 0x00cc99
-                  : e.isEnforcer  ? 0xcc2222
-                  : e.isGhost     ? 0x445566
-                  : 0x8a7744;
-      const alpha = e.isGhost ? 0.25 : (inFOV ? 0.88 : 0.35);
+      if (moved && prev) {
+        const dx = e.x - prev.x;
+        const dy = e.y - prev.y;
+        if (Math.abs(dx) >= Math.abs(dy)) {
+          this.entityFacing.set(e.id, dx > 0 ? 'east' : 'west');
+        } else {
+          this.entityFacing.set(e.id, dy > 0 ? 'south' : 'north');
+        }
+      }
+      this.entityPrevPos.set(e.id, { x: e.x, y: e.y });
 
-      g.fillStyle(color, alpha);
-      g.fillRect(px + 5, py + 5, TILE_SIZE - 10, TILE_SIZE - 10);
+      const tileKey = `${e.x},${e.y}`;
+      const inFOV   = !useFOV || e.isPlayer || this.visibleTiles.has(tileKey);
+      if (!inFOV && !e.isGhost) {
+        // Dim any existing sprite; skip rectangle
+        this.entitySprites.get(e.id)?.setAlpha(0.35);
+        continue;
+      }
 
-      // Thin border for visibility
-      g.lineStyle(1, color, Math.min(alpha + 0.1, 1));
-      g.strokeRect(px + 5, py + 5, TILE_SIZE - 10, TILE_SIZE - 10);
+      const alpha    = e.isGhost ? 0.25 : (inFOV ? 0.9 : 0.35);
+      const atlasKey = this.getAtlasKeyForEntity(e.id);
+      const useSprite = atlasKey !== '' && this.textures.exists(atlasKey) && !e.isGhost;
 
-      // Short ID label
-      const shortId = e.id.slice(0, 7);
-      const lbl = this.add.text(px + TILE_SIZE / 2, py + TILE_SIZE / 2, shortId, {
-        fontFamily: 'monospace', fontSize: '6px', color: '#ffffff',
-      }).setOrigin(0.5).setAlpha(alpha * 0.9).setDepth(11);
-      this.entityLabels.push(lbl);
+      if (useSprite) {
+        this.updateEntitySprite(e, atlasKey, alpha, moved);
+      } else {
+        // Colored rectangle fallback — destroy stale sprite if present
+        const stale = this.entitySprites.get(e.id);
+        if (stale) { stale.destroy(); this.entitySprites.delete(e.id); }
+
+        const px    = e.x * TILE_SIZE;
+        const py    = e.y * TILE_SIZE;
+        const color = e.isPlayer ? 0x00cc99 : e.isEnforcer ? 0xcc2222 : e.isGhost ? 0x445566 : 0x8a7744;
+        g.fillStyle(color, alpha);
+        g.fillRect(px + 5, py + 5, TILE_SIZE - 10, TILE_SIZE - 10);
+        g.lineStyle(1, color, Math.min(alpha + 0.1, 1));
+        g.strokeRect(px + 5, py + 5, TILE_SIZE - 10, TILE_SIZE - 10);
+
+        const lbl = this.add.text(px + TILE_SIZE / 2, py + TILE_SIZE / 2, e.id.slice(0, 7), {
+          fontFamily: 'monospace', fontSize: '6px', color: '#ffffff',
+        }).setOrigin(0.5).setAlpha(alpha * 0.9).setDepth(11);
+        this.entityLabels.push(lbl);
+      }
+    }
+  }
+
+  private updateEntitySprite(
+    e: EntityRenderData, atlasKey: string, alpha: number, moved: boolean,
+  ): void {
+    const px = e.x * TILE_SIZE + TILE_SIZE / 2;
+    const py = e.y * TILE_SIZE + TILE_SIZE / 2;
+
+    let sprite = this.entitySprites.get(e.id);
+    if (!sprite) {
+      sprite = this.add.sprite(px, py, atlasKey).setDepth(10).setOrigin(0.5, 0.5);
+      this.entitySprites.set(e.id, sprite);
+    } else {
+      sprite.setPosition(px, py);
+    }
+    sprite.setAlpha(alpha).setVisible(true);
+
+    const facing  = this.entityFacing.get(e.id) ?? 'south';
+    const action  = moved ? 'walk' : 'idle';
+    const animKey = `${this.animPrefixFromAtlasKey(atlasKey)}_${action}_${facing}`;
+
+    if (this.anims.exists(animKey) && sprite.anims.currentAnim?.key !== animKey) {
+      sprite.play(animKey, true);
+    }
+  }
+
+  private getAtlasKeyForEntity(id: string): string {
+    if (id === 'SOL')                          return 'sol';
+    if (id.startsWith('ENFORCER'))             return 'enforcer';
+    if (id === 'EIRA-7')                       return 'eira7';
+    if (id === 'ALFAR-22')                     return 'alfar22';
+    if (id.startsWith('RESIDENT'))             return 'resident';
+    if (id.startsWith('ADM'))                  return 'administrator';
+    if (id.startsWith('MED'))                  return 'med0';
+    if (id.startsWith('LOGI'))                 return 'logi9';
+    if (id.startsWith('MITE-3A') || id.startsWith('MITE3A')) return 'mite3_a';
+    if (id.startsWith('MITE-3B') || id.startsWith('MITE3B')) return 'mite3_b';
+    if (id.startsWith('MITE-3C') || id.startsWith('MITE3C')) return 'mite3_c';
+    if (id.startsWith('MITE-3D') || id.startsWith('MITE3D')) return 'mite3_d';
+    if (id === 'LUCKY')                        return 'lucky';
+    if (id === 'FORM-8')                       return 'form8';
+    if (id === 'FORM-9')                       return 'form9';
+    if (id === 'VENT-4')                       return 'vent4terminal';
+    return '';
+  }
+
+  private animPrefixFromAtlasKey(atlasKey: string): string {
+    // mite3_a → mite3a; all others unchanged (no underscore in name)
+    return atlasKey.replace('_', '');
+  }
+
+  private atlasKeyFromAnimKey(animKey: string): string {
+    const prefix = animKey.split('_')[0];
+    const REMAP: Record<string, string> = {
+      mite3a: 'mite3_a', mite3b: 'mite3_b', mite3c: 'mite3_c', mite3d: 'mite3_d',
+    };
+    return REMAP[prefix] ?? prefix;
+  }
+
+  private registerAnimations(): void {
+    for (const anim of CHAR_ANIMS) {
+      if (anim.frames[0].startsWith('__')) continue;  // placeholder frames not ready
+      const atlasKey = this.atlasKeyFromAnimKey(anim.key);
+      if (!this.textures.exists(atlasKey)) continue;
+      if (this.anims.exists(anim.key)) continue;
+      this.anims.create({
+        key:       anim.key,
+        frames:    anim.frames.map(f => ({ key: atlasKey, frame: f })),
+        frameRate: anim.frameRate,
+        repeat:    anim.repeat,
+      });
     }
   }
 
@@ -596,5 +717,9 @@ export class GameScene extends Phaser.Scene {
     this.unsubs = [];
     for (const lbl of this.entityLabels) lbl.destroy();
     this.entityLabels = [];
+    for (const sprite of this.entitySprites.values()) sprite.destroy();
+    this.entitySprites.clear();
+    this.entityPrevPos.clear();
+    this.entityFacing.clear();
   }
 }
