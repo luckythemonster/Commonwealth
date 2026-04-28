@@ -623,10 +623,6 @@ export class GameScene extends Phaser.Scene {
   private renderFOV(): void {
     const fov = this.fovGfx;
     fov.clear();
-    // When a Tiled tileset is active, skip fog-of-war so the full user map is visible.
-    const useTileset = this.tiledGidGrid !== null && this.tiledFloor === this.currentFloor
-      && this.textures.exists('user_tileset');
-    if (useTileset) return;
     if (this.visibleTiles.size === 0) return;
 
     const explored = this.exploredByFloor.get(this.currentFloor);
