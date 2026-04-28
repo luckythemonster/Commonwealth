@@ -236,6 +236,8 @@ export class GameScene extends Phaser.Scene {
         this.tiledRT.stamp('user_tileset', frame, x * TILE_SIZE + TILE_SIZE / 2, y * TILE_SIZE + TILE_SIZE / 2);
       }
     }
+    // Phaser 4: RenderTexture draw commands are buffered; flush explicitly.
+    this.tiledRT.render();
   }
 
   // ── EVENTBUS ──────────────────────────────────────────────────────────────
