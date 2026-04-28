@@ -9,7 +9,8 @@ import { calculateFOV } from './fov';
 import { bfsStep } from './WorldEngineActions';
 import type { Entity, WorldState, Vec3, FloorIndex } from '../types/world.types';
 
-const ENFORCER_SIGHT_RADIUS = 5;
+const ENFORCER_SIGHT_RADIUS      = 5;
+const ENFORCER_SIGHT_RADIUS_DARK = 3;
 
 interface PatrolRoute {
   waypoints: Vec3[];
@@ -306,12 +307,30 @@ function findNearestStairwell(pos: Vec3, state: WorldState): Vec3 | null {
   return nearest;
 }
 
+function effectiveSightRadius(enforcer: Entity, state: WorldState): number {
+  const z = enforcer.pos.z;
+  const floorTiles = state.grid[z];
+  if (!floorTiles) return ENFORCER_SIGHT_RADIUS_DARK;
+  // Check for any active light source within 4 tiles on same floor
+  const { x: ex, y: ey } = enforcer.pos;
+  for (let dy = -4; dy <= 4; dy++) {
+    for (let dx = -4; dx <= 4; dx++) {
+      const tile = floorTiles[ey + dy]?.[ex + dx];
+      if (tile?.type === 'LIGHT_SOURCE' && tile.lightSourceOn !== false) {
+        return ENFORCER_SIGHT_RADIUS;
+      }
+    }
+  }
+  return ENFORCER_SIGHT_RADIUS_DARK;
+}
+
 function checkPlayerLOS(enforcer: Entity, state: WorldState): boolean {
   const p = state.playerState.pos;
   if (enforcer.pos.z !== p.z) return false;
   const floorTiles = state.grid[enforcer.pos.z];
   if (!floorTiles) return false;
-  const visible = calculateFOV(floorTiles, enforcer.pos.x, enforcer.pos.y, ENFORCER_SIGHT_RADIUS);
+  const radius = effectiveSightRadius(enforcer, state);
+  const visible = calculateFOV(floorTiles, enforcer.pos.x, enforcer.pos.y, radius);
   return visible.has(`${p.x},${p.y}`);
 }
 

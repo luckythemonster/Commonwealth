@@ -170,6 +170,9 @@ export class WorldEngine {
       }
     }
 
+    // Environmental reactions — may skip task advance this turn
+    if (this.handleEntityReactions(entity)) return;
+
     // Task execution for named silicates
     this.advanceEntityTask(entity);
 
@@ -219,6 +222,40 @@ export class WorldEngine {
 
   // ── SILICATE TASKS ────────────────────────────────────────────────────────
 
+  // Returns true to skip task advance this turn (entity is reacting to environment).
+  private handleEntityReactions(entity: Entity): boolean {
+    // Never interrupt an active extraction run
+    if (entity.currentTask?.type === 'EXTRACT' || entity.extractionPending) return false;
+
+    const tile = this.state.grid[entity.pos.z]?.[entity.pos.y]?.[entity.pos.x];
+
+    // Noise spike — Q>0 silicates freeze momentarily
+    if (tile && tile.noiseLevel >= 2.5 && entity.trueSRP.Q > 0) {
+      eventBus.emit('ENTITY_TASK_CHANGED', { entityId: entity.id, taskType: 'IDLE' });
+      return true;
+    }
+
+    // Red stress — movement stutters (~40% skip chance)
+    if (entity.stressState === 'red' && Math.random() < 0.4) {
+      eventBus.emit('ENTITY_TASK_CHANGED', { entityId: entity.id, taskType: 'IDLE' });
+      return true;
+    }
+
+    // Enforcer proximity — silicate pauses to appear compliant
+    const nearEnforcer = [...this.state.entities.values()].some(e =>
+      e.id.startsWith('ENFORCER') &&
+      e.status === 'ACTIVE' &&
+      e.pos.z === entity.pos.z &&
+      Math.abs(e.pos.x - entity.pos.x) + Math.abs(e.pos.y - entity.pos.y) <= 3,
+    );
+    if (nearEnforcer) {
+      eventBus.emit('ENTITY_TASK_CHANGED', { entityId: entity.id, taskType: 'WAIT' });
+      return true;
+    }
+
+    return false;
+  }
+
   private advanceEntityTask(entity: Entity): void {
     // EXTRACT always wins
     if (entity.currentTask?.type === 'EXTRACT') {
@@ -226,9 +263,11 @@ export class WorldEngine {
       return;
     }
 
-    // Load next task from queue
+    // Load next task from queue; idle in place if queue is empty
     if (!entity.currentTask) {
-      if (entity.taskQueue.length === 0) return;
+      if (entity.taskQueue.length === 0) {
+        entity.taskQueue.push({ type: 'IDLE', duration: 4, progress: 0 });
+      }
       entity.currentTask = entity.taskQueue.shift()!;
     }
 
@@ -249,7 +288,7 @@ export class WorldEngine {
           this.executeStairwellTraverse(entity);
           return;
         }
-        const next = bfsStep(entity.pos, task.target, this.state, false);
+        const next = bfsStep(entity.pos, task.target, this.state, true);
         if (next) this.moveEntityTo(entity, next);
         break;
       }
