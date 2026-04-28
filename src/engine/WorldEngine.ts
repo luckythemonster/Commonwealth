@@ -72,10 +72,15 @@ export class WorldEngine {
         const src = tiledTiles[y][x];
         const dst = existing[y]?.[x];
         if (!dst || !src) continue;
-        dst.type      = src.type;
-        dst.latentQ   = src.latentQ;
-        // doorOpen / locked only meaningful if tile becomes DOOR
-        if (src.type === 'DOOR') { dst.doorOpen = false; dst.locked = false; }
+        dst.type    = src.type;
+        dst.latentQ = src.latentQ;
+        if (src.type === 'DOOR') {
+          dst.doorOpen = src.doorOpen ?? false;
+          dst.locked   = src.locked   ?? false;
+        }
+        if (src.itemId        !== undefined) dst.itemId        = src.itemId;
+        if (src.lightSourceOn !== undefined) dst.lightSourceOn = src.lightSourceOn;
+        if (src.sensorNodeId  !== undefined) dst.sensorNodeId  = src.sensorNodeId;
       }
     }
   }

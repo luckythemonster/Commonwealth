@@ -1,5 +1,6 @@
 // Tiled JSON → WorldTile[][] parser.
 // Reads the "Foreground" layer GIDs, maps tile class properties to TileType,
+// reads the "Objects" layer for per-tile instance data (items, door state, etc.),
 // and returns both game-logic tiles and raw GIDs for visual rendering.
 
 import type { WorldTile, TileType } from '../types/world.types';
@@ -11,9 +12,15 @@ interface TiledTileset {
   tilewidth: number; tileheight: number; columns: number; tilecount: number;
   tiles?: TiledTile[];
 }
+interface TiledObject {
+  x: number; y: number;
+  properties?: TiledProperty[];
+}
 interface TiledLayer {
   name: string; type: string;
-  data?: number[]; width: number; height: number;
+  data?: number[];           // tilelayer
+  objects?: TiledObject[];  // objectgroup
+  width: number; height: number;
 }
 interface TiledMap {
   width: number; height: number;
@@ -46,6 +53,8 @@ function classToType(cls: string): TileType {
   return 'FLOOR';
 }
 
+type ObjProps = Record<string, string | boolean | number>;
+
 export function parseTiledMap(mapJson: TiledMap, z: number): ParsedTiledFloor {
   // Build classMap from ALL tilesets so multi-tileset maps work correctly
   const classMap = new Map<number, string>();
@@ -59,7 +68,6 @@ export function parseTiledMap(mapJson: TiledMap, z: number): ParsedTiledFloor {
   if (!fgLayer?.data) throw new Error('parseTiledMap: no Foreground tilelayer');
 
   // Find which tileset covers the GIDs actually used in this layer.
-  // Pick the tileset with the largest firstgid that is still ≤ the minimum used GID.
   const usedGids = fgLayer.data.filter(g => g > 0);
   const minGid   = usedGids.length > 0 ? Math.min(...usedGids) : 1;
   const activeTileset = mapJson.tilesets.reduce((best, ts) =>
@@ -67,6 +75,20 @@ export function parseTiledMap(mapJson: TiledMap, z: number): ParsedTiledFloor {
     mapJson.tilesets[0],
   );
   const { firstgid, tilewidth, tileheight, columns } = activeTileset;
+
+  // Build grid-cell → property map from the "Objects" layer (optional).
+  const objProps = new Map<string, ObjProps>();
+  const objLayer = mapJson.layers.find(l => l.name === 'Objects' && l.type === 'objectgroup');
+  if (objLayer?.objects) {
+    for (const obj of objLayer.objects) {
+      const gx = Math.floor(obj.x / tilewidth);
+      const gy = Math.floor(obj.y / tileheight);
+      if (gx < 0 || gy < 0 || gx >= mapJson.width || gy >= mapJson.height) continue;
+      const props: ObjProps = {};
+      for (const p of (obj.properties ?? [])) props[p.name] = p.value as string | boolean | number;
+      objProps.set(`${gx},${gy}`, props);
+    }
+  }
 
   const W = mapJson.width;
   const H = mapJson.height;
@@ -82,6 +104,8 @@ export function parseTiledMap(mapJson: TiledMap, z: number): ParsedTiledFloor {
       const type: TileType = gid === 0
         ? 'VOID'
         : classToType(classMap.get(gid) ?? 'floor');
+
+      const props = objProps.get(`${x},${y}`);
       row.push({
         type,
         pos:                  { x, y, z: z as WorldTile['pos']['z'] },
@@ -90,7 +114,18 @@ export function parseTiledMap(mapJson: TiledMap, z: number): ParsedTiledFloor {
         noiseLevel:           0,
         entityIds:            [],
         hasComplianceMonitor: false,
-        ...(type === 'DOOR' ? { doorOpen: false } : {}),
+        // Door state from object props (defaults: closed, unlocked)
+        ...(type === 'DOOR' ? {
+          doorOpen: props?.door_open === true,
+          locked:   props?.locked    === true,
+        } : {}),
+        // Light source: on by default unless explicitly turned off
+        ...(type === 'LIGHT_SOURCE' ? {
+          lightSourceOn: props?.light_off !== true,
+        } : {}),
+        // Per-tile instance data from Objects layer
+        ...(props?.item        ? { itemId:      String(props.item) }        : {}),
+        ...(props?.sensor_node ? { sensorNodeId: String(props.sensor_node) } : {}),
       });
     }
     worldTiles.push(row);
