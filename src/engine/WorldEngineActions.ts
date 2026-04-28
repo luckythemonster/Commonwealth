@@ -129,6 +129,8 @@ export function deductAP(state: WorldState, action: ActionType): boolean {
 }
 
 export function movePlayer(state: WorldState, to: Vec3): boolean {
+  const toTile = state.grid[to.z]?.[to.y]?.[to.x];
+  if (!toTile || toTile.type === 'WALL' || toTile.type === 'VOID') return false;
   if (!deductAP(state, 'MOVE')) return false;
   const from = { ...state.playerState.pos };
   state.playerState.pos = to;
