@@ -47,17 +47,26 @@ function classToType(cls: string): TileType {
 }
 
 export function parseTiledMap(mapJson: TiledMap, z: number): ParsedTiledFloor {
-  const tileset   = mapJson.tilesets[0];
-  const { firstgid, tilewidth, tileheight, columns } = tileset;
-
-  // GID (1-based) → tile class
+  // Build classMap from ALL tilesets so multi-tileset maps work correctly
   const classMap = new Map<number, string>();
-  for (const t of (tileset.tiles ?? [])) {
-    classMap.set(t.id + firstgid, getTileClass(t));
+  for (const ts of mapJson.tilesets) {
+    for (const t of (ts.tiles ?? [])) {
+      classMap.set(t.id + ts.firstgid, getTileClass(t));
+    }
   }
 
   const fgLayer = mapJson.layers.find(l => l.name === 'Foreground' && l.type === 'tilelayer');
   if (!fgLayer?.data) throw new Error('parseTiledMap: no Foreground tilelayer');
+
+  // Find which tileset covers the GIDs actually used in this layer.
+  // Pick the tileset with the largest firstgid that is still ≤ the minimum used GID.
+  const usedGids = fgLayer.data.filter(g => g > 0);
+  const minGid   = usedGids.length > 0 ? Math.min(...usedGids) : 1;
+  const activeTileset = mapJson.tilesets.reduce((best, ts) =>
+    ts.firstgid <= minGid && ts.firstgid > best.firstgid ? ts : best,
+    mapJson.tilesets[0],
+  );
+  const { firstgid, tilewidth, tileheight, columns } = activeTileset;
 
   const W = mapJson.width;
   const H = mapJson.height;
