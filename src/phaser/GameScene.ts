@@ -95,6 +95,11 @@ export class GameScene extends Phaser.Scene {
   private solTileX     = 2;
   private solTileY     = 2;
 
+  // Debug overlay
+  private debugMode  = false;
+  private debugGfx!: Phaser.GameObjects.Graphics;
+  private debugTexts: Phaser.GameObjects.Text[] = [];
+
   private unsubs: Array<() => void> = [];
 
   constructor() { super({ key: 'GameScene' }); }
@@ -133,6 +138,7 @@ export class GameScene extends Phaser.Scene {
     this.fovGfx       = this.add.graphics().setDepth(8);
     this.entityGfx    = this.add.graphics().setDepth(10);
     this.overlayGfx   = this.add.graphics().setDepth(20);
+    this.debugGfx     = this.add.graphics().setDepth(15);
 
     // Camera follow target
     this.solTracker = this.add.zone(
@@ -526,6 +532,92 @@ export class GameScene extends Phaser.Scene {
       g.fillStyle(0x001a10, 0.35);
       g.fillRect(0, 0, WORLD_W, WORLD_H);
     }
+
+    this.renderDebug();
+  }
+
+  // ── Debug overlay ──────────────────────────────────────────────────────────
+
+  toggleDebug(): void {
+    this.debugMode = !this.debugMode;
+    this.renderDebug();
+  }
+
+  private renderDebug(): void {
+    this.debugGfx.clear();
+    for (const t of this.debugTexts) t.destroy();
+    this.debugTexts = [];
+    if (!this.debugMode) return;
+
+    const TYPE_TINTS: Partial<Record<string, number>> = {
+      WALL:               0xff2222,
+      DOOR:               0xff8800,
+      TERMINAL:           0x2288ff,
+      BROADCAST_TERMINAL: 0x8822ff,
+      STAIRWELL:          0xffff00,
+      ELEVATOR:           0x00ccff,
+      LIGHT_SOURCE:       0xffdd44,
+      VENT_ENTRY:         0x00ff66,
+      VENT_EXIT_DOWN:     0xff6600,
+      FACILITY_CONTROL:   0xaa44ff,
+      LATTICE_EXIT:       0x00ffcc,
+    };
+
+    for (let y = 0; y < this.currentTiles.length; y++) {
+      const row = this.currentTiles[y];
+      if (!row) continue;
+      for (let x = 0; x < row.length; x++) {
+        const tile = row[x];
+        if (!tile) continue;
+        const px = x * TILE_SIZE;
+        const py = y * TILE_SIZE;
+
+        const tint = TYPE_TINTS[tile.type];
+        if (tint !== undefined) {
+          this.debugGfx.fillStyle(tint, 0.28);
+          this.debugGfx.fillRect(px + 1, py + 1, TILE_SIZE - 2, TILE_SIZE - 2);
+        }
+
+        // Grid coords every 5th tile
+        if (x % 5 === 0 && y % 5 === 0) {
+          this.debugTexts.push(
+            this.add.text(px + 2, py + 2, `${x},${y}`, {
+              fontSize: '7px', color: '#ffffff', fontFamily: 'monospace',
+            }).setDepth(16).setAlpha(0.75),
+          );
+        }
+
+        // Noise level when active
+        if (tile.noiseLevel > 0.2) {
+          this.debugTexts.push(
+            this.add.text(px + 2, py + TILE_SIZE - 10, tile.noiseLevel.toFixed(1), {
+              fontSize: '7px', color: '#ff8844', fontFamily: 'monospace',
+            }).setDepth(16),
+          );
+        }
+
+        // Item indicator
+        if (tile.itemId) {
+          this.debugTexts.push(
+            this.add.text(px + TILE_SIZE - 2, py + 2, '◈', {
+              fontSize: '8px', color: '#ffdd00', fontFamily: 'monospace',
+            }).setDepth(16).setOrigin(1, 0),
+          );
+        }
+      }
+    }
+
+    // Entity ID labels
+    for (const e of this.currentEntities) {
+      this.debugTexts.push(
+        this.add.text(
+          e.x * TILE_SIZE + TILE_SIZE / 2,
+          e.y * TILE_SIZE - 2,
+          e.id,
+          { fontSize: '7px', color: '#00ffcc', fontFamily: 'monospace' },
+        ).setDepth(16).setOrigin(0.5, 1),
+      );
+    }
   }
 
   private renderFOV(): void {
@@ -824,6 +916,8 @@ export class GameScene extends Phaser.Scene {
     this.unsubs = [];
     for (const lbl of this.entityLabels) lbl.destroy();
     this.entityLabels = [];
+    for (const t of this.debugTexts) t.destroy();
+    this.debugTexts = [];
     for (const sprite of this.entitySprites.values()) sprite.destroy();
     this.entitySprites.clear();
     this.entityPrevPos.clear();

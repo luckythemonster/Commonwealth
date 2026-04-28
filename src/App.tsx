@@ -165,6 +165,7 @@ export default function App() {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
       // Modal keys
       if (e.key === 'i' || e.key === 'I') { setShowInventory(v => !v); return; }
+      if (e.key === '`') { sceneRef.current?.toggleDebug(); return; }
       // Movement & actions
       switch (e.key) {
         case 'ArrowUp':    gameActions.tryMove(0, -1);    break;
